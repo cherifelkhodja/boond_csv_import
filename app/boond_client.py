@@ -95,6 +95,76 @@ class BoondClient:
 
         return payload
 
+    async def _create_opportunity(
+        self,
+        title: str,
+        contact_id: int | str,
+        company_id: int | str,
+        main_manager_id: int | str | None = None,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create an opportunity (action) in BoondManager.
+
+        Returns: (success, opportunity_id, error_message)
+        """
+        payload: dict[str, Any] = {
+            "data": {
+                "type": "action",
+                "attributes": {
+                    "title": title,
+                    "state": 0,  # En cours
+                },
+                "relationships": {
+                    "contact": {
+                        "data": {
+                            "id": str(contact_id),
+                            "type": "contact",
+                        }
+                    },
+                    "company": {
+                        "data": {
+                            "id": str(company_id),
+                            "type": "company",
+                        }
+                    },
+                },
+            }
+        }
+
+        # Add main manager if provided
+        if main_manager_id:
+            payload["data"]["relationships"]["mainManager"] = {
+                "data": {
+                    "id": str(main_manager_id),
+                    "type": "resource",
+                }
+            }
+
+        logger.info(f"Creating opportunity with payload: {payload}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/actions",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    opportunity_id = data.get("data", {}).get("id")
+                    logger.info(f"Created opportunity with ID: {opportunity_id}")
+                    return True, opportunity_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Opportunity API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                return False, None, str(e)
+
     async def _create_won_positioning(
         self,
         opportunity_id: int | str,
@@ -165,18 +235,39 @@ class BoondClient:
 
         Returns: (success, entity_id, error_message)
         """
-        # For projects with opportunity_id but no fixed/product mode,
-        # we need to create a won positioning first
+        # For projects, handle opportunity and positioning creation
         if entity_type == "projects":
             opportunity_id = row_data.get("opportunity_id")
             mode = row_data.get("mode")
             resource_id = row_data.get("main_manager_id") or row_data.get("resource_id")
+            contact_id = row_data.get("contact_id")
+            company_id = row_data.get("company_id")
+            title = row_data.get("reference") or "Nouveau projet"
 
-            # If opportunity provided and mode is not fixed(1) or product(2), create positioning
-            if opportunity_id and mode not in (1, 2, "1", "2"):
+            # If mode is not fixed(1) or product(2), we need positioning
+            if mode not in (1, 2, "1", "2"):
                 if not resource_id:
-                    return False, None, "resource_id ou main_manager_id requis pour créer un positionnement"
+                    return False, None, "main_manager_id requis pour créer un positionnement"
 
+                # If no opportunity provided, create one first
+                if not opportunity_id:
+                    if not contact_id:
+                        return False, None, "contact_id requis pour créer une opportunité"
+                    if not company_id:
+                        return False, None, "company_id requis pour créer une opportunité"
+
+                    logger.info(f"Creating opportunity '{title}' for contact {contact_id}")
+                    success, new_opp_id, error = await self._create_opportunity(
+                        title, contact_id, company_id, resource_id
+                    )
+                    if not success:
+                        return False, None, f"Erreur création opportunité: {error}"
+
+                    opportunity_id = new_opp_id
+                    row_data["opportunity_id"] = opportunity_id
+                    logger.info(f"Opportunity created with ID: {opportunity_id}")
+
+                # Create won positioning
                 logger.info(f"Creating won positioning for opportunity {opportunity_id}")
                 success, pos_id, error = await self._create_won_positioning(
                     opportunity_id, resource_id
