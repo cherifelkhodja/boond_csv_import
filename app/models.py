@@ -140,7 +140,7 @@ ENTITY_CONFIGS = {
         "endpoint": "/deliveries",
         "template_fields": [
             "project_id", "resource_id", "title", "start_date", "end_date",
-            "average_daily_price_excluding_tax", "number_of_days_invoiced",
+            "average_daily_price_excluding_tax", "number_of_days_invoiced", "number_of_days_free",
         ],
     },
     "orders": {
