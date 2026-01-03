@@ -350,6 +350,28 @@ class BoondClient:
                         if delivery_ids:
                             await self._link_order_deliveries(entity_id, delivery_ids)
 
+                    # For deliveries: auto-create purchase for external consultants (typeOf 1 or 10)
+                    if entity_type == "deliveries":
+                        resource_id = row_data.get("resource_id")
+                        project_id = row_data.get("project_id")
+                        if resource_id and project_id:
+                            success, resource_data, _ = await self._get_resource_info(resource_id)
+                            if success and resource_data:
+                                type_of = resource_data.get("attributes", {}).get("typeOf")
+                                if type_of in (1, 10):
+                                    # External consultant - create purchase
+                                    first_name = resource_data.get("attributes", {}).get("firstName", "")
+                                    last_name = resource_data.get("attributes", {}).get("lastName", "")
+                                    resource_name = f"{last_name.upper()} {first_name}"
+
+                                    purchase_success, purchase_id, purchase_error = await self._create_purchase_for_delivery(
+                                        entity_id, project_id, resource_id, resource_name, row_data
+                                    )
+                                    if purchase_success:
+                                        logger.info(f"Auto-created purchase {purchase_id} for external consultant")
+                                    else:
+                                        logger.warning(f"Failed to auto-create purchase: {purchase_error}")
+
                     return True, entity_id, None
                 else:
                     error_data = response.json() if response.content else {}
@@ -400,6 +422,109 @@ class BoondClient:
                     )
             except Exception as e:
                 logger.warning(f"Failed to link deliveries to order {order_id}: {e}")
+
+    async def _get_resource_info(
+        self,
+        resource_id: int | str,
+    ) -> tuple[bool, dict[str, Any] | None, str | None]:
+        """
+        Get resource information from BoondManager.
+
+        Returns: (success, resource_data, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/resources/{resource_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return True, data.get("data", {}), None
+                else:
+                    return False, None, f"Erreur API: {response.status_code}"
+
+            except Exception as e:
+                return False, None, str(e)
+
+    async def _create_purchase_for_delivery(
+        self,
+        delivery_id: str,
+        project_id: str,
+        resource_id: str,
+        resource_name: str,
+        delivery_data: dict[str, Any],
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create a purchase linked to a delivery for external consultants.
+
+        Returns: (success, purchase_id, error_message)
+        """
+        # Build purchase title: "LASTNAME FirstName - DEL{delivery_id}"
+        title = f"{resource_name} - DEL{delivery_id}"
+
+        # Get values from delivery data
+        start_date = delivery_data.get("start_date", "")
+        end_date = delivery_data.get("end_date", "")
+        tjm = delivery_data.get("average_daily_price_excluding_tax", 0)
+        nb_days = delivery_data.get("number_of_days_invoiced", 0)
+
+        # Calculate amount
+        amount = float(tjm) * float(nb_days) if tjm and nb_days else 0
+
+        payload: dict[str, Any] = {
+            "data": {
+                "type": "purchase",
+                "attributes": {
+                    "title": title,
+                    "state": 1,
+                    "amountExcludingTax": amount,
+                    "startDate": start_date,
+                    "endDate": end_date,
+                },
+                "relationships": {
+                    "project": {
+                        "data": {
+                            "id": str(project_id),
+                            "type": "project",
+                        }
+                    },
+                    "delivery": {
+                        "data": {
+                            "id": str(delivery_id),
+                            "type": "delivery",
+                        }
+                    },
+                },
+            }
+        }
+
+        logger.info(f"Creating purchase for delivery {delivery_id} with payload: {payload}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/purchases",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    purchase_id = data.get("data", {}).get("id")
+                    logger.info(f"Created purchase {purchase_id} for delivery {delivery_id}")
+                    return True, purchase_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Purchase API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                return False, None, str(e)
 
     def _extract_error_message(
         self,
