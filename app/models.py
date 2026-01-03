@@ -29,6 +29,7 @@ PROJECT_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "contact_id": ("contact", False, True, "contact"),
     "technical_contact_id": ("technicalContact", False, True, "contact"),
     "main_manager_id": ("mainManager", False, True, "resource"),
+    "resource_id": ("resource", False, True, "resource"),  # Ressource/candidat pour le positionnement
     "agency_id": ("agency", False, True, "agency"),
     "pole_id": ("pole", False, True, "pole"),
     "opportunity_id": ("opportunity", False, True, "opportunity"),
