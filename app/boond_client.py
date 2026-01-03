@@ -112,7 +112,7 @@ class BoondClient:
                 "type": "opportunity",
                 "attributes": {
                     "title": title,
-                    "state": 0,  # En cours
+                    "state": 1,  # État actif
                     "typeOf": 1,  # Type standard
                     "mode": 1,   # Mode standard
                 },
@@ -178,12 +178,12 @@ class BoondClient:
 
         Returns: (success, positioning_id, error_message)
         """
-        # State 3 = won (gagné) in BoondManager
+        # State 2 = won (gagné) in BoondManager
         payload = {
             "data": {
                 "type": "positioning",
                 "attributes": {
-                    "state": 3,  # Won/Gagné
+                    "state": 2,  # Won/Gagné
                 },
                 "relationships": {
                     "opportunity": {
