@@ -93,6 +93,10 @@ class BoondClient:
         if relationships:
             payload["data"]["relationships"] = relationships
 
+        # For deliveries: auto-set forceAverageDailyPriceExcludingTax when TJM is provided
+        if entity_type == "deliveries" and "averageDailyPriceExcludingTax" in attributes:
+            attributes["forceAverageDailyPriceExcludingTax"] = True
+
         return payload
 
     async def _create_opportunity(

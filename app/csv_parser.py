@@ -208,7 +208,7 @@ def convert_row_values(
             "group_mission", "group_expenses", "copy_comments",
             "attach_signed_timesheets", "attach_unsigned_timesheets",
             "attach_expenses", "request_timesheets_signature",
-            "merge_invoice_attachments", "rebillable",
+            "merge_invoice_attachments", "rebillable", "force_average_daily_price",
         }
         if field in boolean_fields:
             converted[field] = value.lower() in TRUE_VALUES
