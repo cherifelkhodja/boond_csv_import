@@ -564,8 +564,11 @@ function exportResults(entity, container) {
     const firstResult = results.results[0];
     const originalHeaders = firstResult.original_data ? Object.keys(firstResult.original_data) : [];
 
-    // Build headers: original data + boond_id + status + message
-    const headers = [...originalHeaders, 'boond_id', 'status', 'message'];
+    // Build entity-specific ID column name (projects -> project_id, deliveries -> delivery_id)
+    const entityIdName = entity.replace(/s$/, '') + '_id';
+
+    // Build headers: original data + entity_id + status + message
+    const headers = [...originalHeaders, entityIdName, 'status', 'message'];
 
     // Build CSV content
     const headerLine = headers.join(';');
