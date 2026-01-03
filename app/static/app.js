@@ -6,19 +6,26 @@
 const ENTITY_CONFIG = {
     projects: {
         requiredFields: ['company_id', 'type_of'],
-        label: 'Projects'
+        label: 'Projects',
+        notes: []
     },
     deliveries: {
         requiredFields: ['project_id', 'resource_id'],
-        label: 'Deliveries'
+        label: 'Deliveries',
+        notes: [
+            'La ressource et le projet doivent appartenir a la meme agence',
+            'La ressource doit avoir un contrat actif couvrant les dates de la delivery'
+        ]
     },
     orders: {
         requiredFields: ['project_id', 'reference', 'turnover_excluding_tax'],
-        label: 'Orders'
+        label: 'Orders',
+        notes: []
     },
     purchases: {
         requiredFields: ['project_id', 'title', 'amount_excluding_tax'],
-        label: 'Purchases'
+        label: 'Purchases',
+        notes: []
     }
 };
 
@@ -104,6 +111,19 @@ function initializeEntityTab(entity) {
     // Set required fields display
     const requiredFieldsSpan = clone.querySelector('.required-fields');
     requiredFieldsSpan.textContent = ENTITY_CONFIG[entity].requiredFields.join(', ');
+
+    // Display notes if any
+    const notes = ENTITY_CONFIG[entity].notes || [];
+    if (notes.length > 0) {
+        const notesContainer = clone.querySelector('.entity-notes');
+        const notesList = clone.querySelector('.notes-list');
+        notes.forEach(note => {
+            const li = document.createElement('li');
+            li.textContent = note;
+            notesList.appendChild(li);
+        });
+        notesContainer.classList.remove('hidden');
+    }
 
     // Initialize state
     entityData[entity] = {

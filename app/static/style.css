@@ -201,6 +201,29 @@ main {
     font-weight: 600;
 }
 
+/* Entity notes */
+.entity-notes {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: var(--radius);
+    color: #856404;
+}
+
+.notes-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.notes-list li {
+    margin-bottom: 0.25rem;
+}
+
+.notes-list li:last-child {
+    margin-bottom: 0;
+}
+
 /* Dropzone */
 .dropzone {
     border: 2px dashed var(--border-color);
