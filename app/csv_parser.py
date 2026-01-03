@@ -221,7 +221,7 @@ def convert_row_values(
             "average_daily_price_excluding_tax", "purchase_price_excluding_tax",
             "turnover_excluding_tax", "turnover_including_tax", "tax_rate",
             "amount_excluding_tax", "amount_including_tax", "rebillable_rate",
-            "number_of_days_invoiced", "number_of_days_free", "work_unit_rate", "exchange_rate",
+            "work_unit_rate", "exchange_rate",
         }
         if field in decimal_fields:
             try:
@@ -242,6 +242,7 @@ def convert_row_values(
         integer_fields = {
             "type_of", "state", "mode", "billing_mode", "billing_type",
             "payment_terms", "payment_method", "language",
+            "number_of_days_free", "number_of_days_invoiced",
         }
         if field in integer_fields:
             try:
