@@ -95,6 +95,66 @@ class BoondClient:
 
         return payload
 
+    async def _create_won_positioning(
+        self,
+        opportunity_id: int | str,
+        resource_id: int | str,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create a won positioning for an opportunity.
+        This is required to create projects in modes other than fixed/product.
+
+        Returns: (success, positioning_id, error_message)
+        """
+        # State 3 = won (gagné) in BoondManager
+        payload = {
+            "data": {
+                "type": "positioning",
+                "attributes": {
+                    "state": 3,  # Won/Gagné
+                },
+                "relationships": {
+                    "action": {
+                        "data": {
+                            "id": str(opportunity_id),
+                            "type": "action",
+                        }
+                    },
+                    "resource": {
+                        "data": {
+                            "id": str(resource_id),
+                            "type": "resource",
+                        }
+                    },
+                },
+            }
+        }
+
+        logger.info(f"Creating won positioning with payload: {payload}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/positionings",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    positioning_id = data.get("data", {}).get("id")
+                    logger.info(f"Created won positioning with ID: {positioning_id}")
+                    return True, positioning_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Positioning API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                return False, None, str(e)
+
     async def create_entity(
         self,
         entity_type: str,
@@ -105,6 +165,26 @@ class BoondClient:
 
         Returns: (success, entity_id, error_message)
         """
+        # For projects with opportunity_id but no fixed/product mode,
+        # we need to create a won positioning first
+        if entity_type == "projects":
+            opportunity_id = row_data.get("opportunity_id")
+            mode = row_data.get("mode")
+            resource_id = row_data.get("main_manager_id") or row_data.get("resource_id")
+
+            # If opportunity provided and mode is not fixed(1) or product(2), create positioning
+            if opportunity_id and mode not in (1, 2, "1", "2"):
+                if not resource_id:
+                    return False, None, "resource_id ou main_manager_id requis pour créer un positionnement"
+
+                logger.info(f"Creating won positioning for opportunity {opportunity_id}")
+                success, pos_id, error = await self._create_won_positioning(
+                    opportunity_id, resource_id
+                )
+                if not success:
+                    return False, None, f"Erreur création positionnement: {error}"
+                logger.info(f"Won positioning created: {pos_id}")
+
         config = ENTITY_CONFIGS[entity_type]
         endpoint = config["endpoint"]
         payload = self._build_payload(entity_type, row_data)
