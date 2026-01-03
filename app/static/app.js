@@ -221,20 +221,33 @@ async function handleFileSelect(entity, file, container) {
 }
 
 /**
+ * Detect CSV delimiter (comma or semicolon)
+ */
+function detectDelimiter(firstLine) {
+    const semicolons = (firstLine.match(/;/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    return semicolons > commas ? ';' : ',';
+}
+
+/**
  * Parse CSV content
  */
 function parseCSV(entity, content, container) {
     const lines = content.trim().split('\n');
     if (lines.length === 0) return;
 
+    // Detect delimiter
+    const delimiter = detectDelimiter(lines[0]);
+    entityData[entity].delimiter = delimiter;
+
     // Parse headers
-    const headers = lines[0].split(',').map(h => h.trim());
+    const headers = lines[0].split(delimiter).map(h => h.trim());
     entityData[entity].headers = headers;
 
     // Parse rows
     const rows = [];
     for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
+        const values = parseCSVLine(lines[i], delimiter);
         if (values.length > 0) {
             const row = {};
             headers.forEach((header, index) => {
@@ -256,7 +269,7 @@ function parseCSV(entity, content, container) {
 /**
  * Parse a single CSV line (handling quoted values)
  */
-function parseCSVLine(line) {
+function parseCSVLine(line, delimiter = ',') {
     const result = [];
     let current = '';
     let inQuotes = false;
@@ -266,7 +279,7 @@ function parseCSVLine(line) {
 
         if (char === '"') {
             inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
+        } else if (char === delimiter && !inQuotes) {
             result.push(current.trim());
             current = '';
         } else {

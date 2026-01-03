@@ -22,13 +22,23 @@ TRUE_VALUES = {"true", "1", "yes", "oui"}
 FALSE_VALUES = {"false", "0", "no", "non"}
 
 
+def detect_delimiter(content: str) -> str:
+    """Detect CSV delimiter (comma or semicolon)."""
+    first_line = content.split('\n')[0] if content else ''
+    semicolons = first_line.count(';')
+    commas = first_line.count(',')
+    return ';' if semicolons > commas else ','
+
+
 def parse_csv(content: str) -> tuple[list[str], list[dict[str, str]]]:
     """
     Parse CSV content into headers and rows.
+    Automatically detects delimiter (comma or semicolon).
 
     Returns: (headers, list of row dicts)
     """
-    reader = csv.DictReader(io.StringIO(content))
+    delimiter = detect_delimiter(content)
+    reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
     headers = reader.fieldnames or []
     rows = list(reader)
     return headers, rows
