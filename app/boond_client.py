@@ -91,7 +91,7 @@ class BoondClient:
         }
 
         if relationships:
-            payload["data"]["relationships"] = {"dependsOn": relationships}
+            payload["data"]["relationships"] = relationships
 
         return payload
 

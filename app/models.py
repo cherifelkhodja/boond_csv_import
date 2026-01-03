@@ -31,7 +31,7 @@ PROJECT_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "main_manager_id": ("mainManager", False, True, "resource"),
     "agency_id": ("agency", False, True, "agency"),
     "pole_id": ("pole", False, True, "pole"),
-    "opportunity_id": ("opportunity", False, True, "action"),
+    "opportunity_id": ("opportunity", False, True, "opportunity"),
     "billing_intermediary_company_id": ("billingIntermediaryCompany", False, True, "company"),
     "billing_intermediary_contact_id": ("billingIntermediaryContact", False, True, "contact"),
 }
