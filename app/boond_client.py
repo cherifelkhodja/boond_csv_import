@@ -184,13 +184,13 @@ class BoondClient:
                     "state": 3,  # Won/Gagné
                 },
                 "relationships": {
-                    "action": {
+                    "opportunity": {
                         "data": {
                             "id": str(opportunity_id),
-                            "type": "action",
+                            "type": "opportunity",
                         }
                     },
-                    "resource": {
+                    "dependsOn": {
                         "data": {
                             "id": str(resource_id),
                             "type": "resource",
