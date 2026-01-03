@@ -101,6 +101,7 @@ class BoondClient:
         contact_id: int | str,
         company_id: int | str,
         main_manager_id: int | str | None = None,
+        agency_id: int | str | None = None,
     ) -> tuple[bool, str | None, str | None]:
         """
         Create an opportunity (action) in BoondManager.
@@ -142,6 +143,15 @@ class BoondClient:
                 }
             }
 
+        # Add agency if provided
+        if agency_id:
+            payload["data"]["relationships"]["agency"] = {
+                "data": {
+                    "id": str(agency_id),
+                    "type": "agency",
+                }
+            }
+
         logger.info(f"Creating opportunity with payload: {payload}")
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -171,6 +181,8 @@ class BoondClient:
         self,
         opportunity_id: int | str,
         resource_id: int | str,
+        main_manager_id: int | str | None = None,
+        agency_id: int | str | None = None,
     ) -> tuple[bool, str | None, str | None]:
         """
         Create a won positioning for an opportunity.
@@ -179,7 +191,7 @@ class BoondClient:
         Returns: (success, positioning_id, error_message)
         """
         # State 2 = won (gagné) in BoondManager
-        payload = {
+        payload: dict[str, Any] = {
             "data": {
                 "type": "positioning",
                 "attributes": {
@@ -201,6 +213,24 @@ class BoondClient:
                 },
             }
         }
+
+        # Add main manager if provided
+        if main_manager_id:
+            payload["data"]["relationships"]["mainManager"] = {
+                "data": {
+                    "id": str(main_manager_id),
+                    "type": "resource",
+                }
+            }
+
+        # Add agency if provided
+        if agency_id:
+            payload["data"]["relationships"]["agency"] = {
+                "data": {
+                    "id": str(agency_id),
+                    "type": "agency",
+                }
+            }
 
         logger.info(f"Creating won positioning with payload: {payload}")
 
@@ -262,9 +292,10 @@ class BoondClient:
                     if not company_id:
                         return False, None, "company_id requis pour créer une opportunité"
 
+                    agency_id = row_data.get("agency_id")
                     logger.info(f"Creating opportunity '{title}' for contact {contact_id}")
                     success, new_opp_id, error = await self._create_opportunity(
-                        title, contact_id, company_id, main_manager_id
+                        title, contact_id, company_id, main_manager_id, agency_id
                     )
                     if not success:
                         return False, None, f"Erreur création opportunité: {error}"
@@ -274,9 +305,10 @@ class BoondClient:
                     logger.info(f"Opportunity created with ID: {opportunity_id}")
 
                 # Create won positioning - this automatically creates the project
+                agency_id = row_data.get("agency_id")
                 logger.info(f"Creating won positioning for opportunity {opportunity_id}")
                 success, project_id, error = await self._create_won_positioning(
-                    opportunity_id, resource_id
+                    opportunity_id, resource_id, main_manager_id, agency_id
                 )
                 if not success:
                     return False, None, f"Erreur création positionnement: {error}"
