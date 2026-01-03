@@ -109,10 +109,12 @@ class BoondClient:
         """
         payload: dict[str, Any] = {
             "data": {
-                "type": "action",
+                "type": "opportunity",
                 "attributes": {
                     "title": title,
                     "state": 0,  # En cours
+                    "typeOf": 1,  # Type standard
+                    "mode": 1,   # Mode standard
                 },
                 "relationships": {
                     "contact": {
@@ -145,7 +147,7 @@ class BoondClient:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.post(
-                    f"{self.base_url}/actions",
+                    f"{self.base_url}/opportunities",
                     json=payload,
                     auth=self.auth,
                     headers=self._get_headers(),
