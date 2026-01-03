@@ -221,6 +221,7 @@ def convert_row_values(
             "average_daily_price_excluding_tax", "purchase_price_excluding_tax",
             "turnover_excluding_tax", "turnover_including_tax", "tax_rate",
             "amount_excluding_tax", "amount_including_tax", "rebillable_rate",
+            "number_of_days_invoiced", "work_unit_rate", "exchange_rate",
         }
         if field in decimal_fields:
             try:
