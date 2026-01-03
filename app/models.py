@@ -185,6 +185,7 @@ class ImportResult(BaseModel):
     status: str  # "success" or "error"
     id: str | None = None
     message: str | None = None
+    original_data: dict[str, Any] = Field(default_factory=dict)
 
 
 class ImportResponse(BaseModel):

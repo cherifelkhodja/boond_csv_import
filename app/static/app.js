@@ -538,13 +538,30 @@ async function importData(entity, container) {
  */
 function exportResults(entity, container) {
     const results = entityData[entity].importResults;
-    if (!results) return;
+    if (!results || !results.results.length) return;
 
-    const csvContent = 'row,status,id,message\n' +
-        results.results.map(r =>
-            `${r.row},${r.status},${r.id || ''},${escapeCSVValue(r.message || '')}`
-        ).join('\n');
+    // Get original headers from the first result's original_data
+    const firstResult = results.results[0];
+    const originalHeaders = firstResult.original_data ? Object.keys(firstResult.original_data) : [];
 
+    // Build headers: original data + boond_id + status + message
+    const headers = [...originalHeaders, 'boond_id', 'status', 'message'];
+
+    // Build CSV content
+    const headerLine = headers.join(';');
+    const dataLines = results.results.map(r => {
+        const originalValues = originalHeaders.map(h =>
+            escapeCSVValue(r.original_data ? (r.original_data[h] || '') : '')
+        );
+        return [
+            ...originalValues,
+            r.id || '',
+            r.status,
+            escapeCSVValue(r.message || '')
+        ].join(';');
+    });
+
+    const csvContent = [headerLine, ...dataLines].join('\n');
     downloadCSV(csvContent, `${entity}_import_results.csv`);
 }
 

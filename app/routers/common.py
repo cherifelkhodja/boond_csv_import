@@ -111,6 +111,7 @@ def create_entity_router(entity_type: str) -> APIRouter:
                         status="success",
                         id=entity_id,
                         message=None,
+                        original_data=row,
                     )
                 )
                 logger.info(f"Row {row_num}: Created {entity_type} with ID {entity_id}")
@@ -122,6 +123,7 @@ def create_entity_router(entity_type: str) -> APIRouter:
                         status="error",
                         id=None,
                         message=error_msg,
+                        original_data=row,
                     )
                 )
                 logger.warning(f"Row {row_num}: Failed to create {entity_type}: {error_msg}")
