@@ -237,6 +237,18 @@ def convert_row_values(
                 converted[field] = value
             continue
 
+        # Integer conversion for type/state/mode fields
+        integer_fields = {
+            "type_of", "state", "mode", "billing_mode", "billing_type",
+            "payment_terms", "payment_method", "language",
+        }
+        if field in integer_fields:
+            try:
+                converted[field] = int(value)
+            except ValueError:
+                converted[field] = value
+            continue
+
         # Keep as string
         converted[field] = value
 

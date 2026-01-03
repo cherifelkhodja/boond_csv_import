@@ -134,6 +134,8 @@ class BoondClient:
                     return True, entity_id, None
                 else:
                     error_data = response.json() if response.content else {}
+                    logger.warning(f"API response status: {response.status_code}")
+                    logger.warning(f"API response body: {error_data}")
                     error_msg = self._extract_error_message(error_data, response.status_code)
                     logger.warning(f"Failed to create {entity_type}: {error_msg}")
                     return False, None, error_msg
