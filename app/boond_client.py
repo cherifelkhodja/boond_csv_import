@@ -216,8 +216,11 @@ class BoondClient:
                 if response.status_code in (200, 201):
                     data = response.json()
                     positioning_id = data.get("data", {}).get("id")
-                    logger.info(f"Created won positioning with ID: {positioning_id}")
-                    return True, positioning_id, None
+                    # Get the automatically created project ID
+                    project_data = data.get("data", {}).get("relationships", {}).get("project", {}).get("data")
+                    project_id = project_data.get("id") if project_data else None
+                    logger.info(f"Created won positioning with ID: {positioning_id}, project ID: {project_id}")
+                    return True, project_id, None  # Return project_id instead of positioning_id
                 else:
                     error_data = response.json() if response.content else {}
                     logger.warning(f"Positioning API response: {error_data}")
@@ -269,14 +272,20 @@ class BoondClient:
                     row_data["opportunity_id"] = opportunity_id
                     logger.info(f"Opportunity created with ID: {opportunity_id}")
 
-                # Create won positioning
+                # Create won positioning - this automatically creates the project
                 logger.info(f"Creating won positioning for opportunity {opportunity_id}")
-                success, pos_id, error = await self._create_won_positioning(
+                success, project_id, error = await self._create_won_positioning(
                     opportunity_id, resource_id
                 )
                 if not success:
                     return False, None, f"Erreur création positionnement: {error}"
-                logger.info(f"Won positioning created: {pos_id}")
+
+                # The project is created automatically, return its ID
+                if project_id:
+                    logger.info(f"Project created automatically with ID: {project_id}")
+                    return True, project_id, None
+                else:
+                    return False, None, "Positionnement créé mais ID projet non trouvé"
 
         config = ENTITY_CONFIGS[entity_type]
         endpoint = config["endpoint"]
