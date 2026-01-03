@@ -363,9 +363,10 @@ class BoondClient:
                                     first_name = resource_data.get("attributes", {}).get("firstName", "")
                                     last_name = resource_data.get("attributes", {}).get("lastName", "")
                                     resource_name = f"{last_name.upper()} {first_name}"
+                                    start_date = row_data.get("start_date", "")
 
                                     purchase_success, purchase_id, purchase_error = await self._create_purchase_for_delivery(
-                                        entity_id, project_id, resource_id, resource_name, row_data
+                                        entity_id, project_id, resource_name, start_date
                                     )
                                     if purchase_success:
                                         logger.info(f"Auto-created purchase {purchase_id} for external consultant")
@@ -453,9 +454,8 @@ class BoondClient:
         self,
         delivery_id: str,
         project_id: str,
-        resource_id: str,
         resource_name: str,
-        delivery_data: dict[str, Any],
+        start_date: str,
     ) -> tuple[bool, str | None, str | None]:
         """
         Create a purchase linked to a delivery for external consultants.
@@ -465,36 +465,25 @@ class BoondClient:
         # Build purchase title: "LASTNAME FirstName - DEL{delivery_id}"
         title = f"{resource_name} - DEL{delivery_id}"
 
-        # Get values from delivery data
-        start_date = delivery_data.get("start_date", "")
-        end_date = delivery_data.get("end_date", "")
-        tjm = delivery_data.get("average_daily_price_excluding_tax", 0)
-        nb_days = delivery_data.get("number_of_days_invoiced", 0)
-
-        # Calculate amount
-        amount = float(tjm) * float(nb_days) if tjm and nb_days else 0
-
         payload: dict[str, Any] = {
             "data": {
                 "type": "purchase",
                 "attributes": {
+                    "date": start_date,
                     "title": title,
-                    "state": 1,
-                    "amountExcludingTax": amount,
-                    "startDate": start_date,
-                    "endDate": end_date,
+                    "createPayments": "manually",
                 },
                 "relationships": {
-                    "project": {
-                        "data": {
-                            "id": str(project_id),
-                            "type": "project",
-                        }
-                    },
                     "delivery": {
                         "data": {
                             "id": str(delivery_id),
                             "type": "delivery",
+                        }
+                    },
+                    "project": {
+                        "data": {
+                            "id": str(project_id),
+                            "type": "project",
                         }
                     },
                 },
