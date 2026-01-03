@@ -257,5 +257,9 @@ def convert_row_values(
 
 def generate_template(entity_type: str) -> str:
     """Generate CSV template for an entity type."""
-    fields = get_all_fields(entity_type)
+    config = ENTITY_CONFIGS.get(entity_type)
+    if config and "template_fields" in config:
+        fields = config["template_fields"]
+    else:
+        fields = get_all_fields(entity_type)
     return ",".join(fields)

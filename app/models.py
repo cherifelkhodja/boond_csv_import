@@ -129,21 +129,34 @@ ENTITY_CONFIGS = {
         "fields": PROJECT_FIELDS,
         "api_type": "project",
         "endpoint": "/projects",
+        "template_fields": [
+            "company_id", "type_of", "reference", "contact_id",
+            "main_manager_id", "resource_id", "agency_id", "opportunity_id",
+        ],
     },
     "deliveries": {
         "fields": DELIVERY_FIELDS,
         "api_type": "delivery",
         "endpoint": "/deliveries",
+        "template_fields": [
+            "project_id", "resource_id", "title", "start_date", "end_date",
+        ],
     },
     "orders": {
         "fields": ORDER_FIELDS,
         "api_type": "order",
         "endpoint": "/orders",
+        "template_fields": [
+            "project_id", "reference", "turnover_excluding_tax", "date",
+        ],
     },
     "purchases": {
         "fields": PURCHASE_FIELDS,
         "api_type": "purchase",
         "endpoint": "/purchases",
+        "template_fields": [
+            "project_id", "title", "amount_excluding_tax", "date",
+        ],
     },
 }
 
