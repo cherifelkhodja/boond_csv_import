@@ -39,19 +39,17 @@ PROJECT_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
 
 DELIVERY_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "project_id": ("project", True, True, "project"),
-    "resource_id": ("resource", True, True, "resource"),
+    "resource_id": ("dependsOn", True, True, "resource"),  # API uses "dependsOn" for resource
     "title": ("title", False, False, None),
     "start_date": ("startDate", False, False, None),
     "end_date": ("endDate", False, False, None),
     "state": ("state", False, False, None),
-    "signed_turnover": ("signedTurnover", False, False, None),
+    "type_of": ("typeOf", False, False, None),
     "average_daily_price_excluding_tax": ("averageDailyPriceExcludingTax", False, False, None),
+    "number_of_days_invoiced": ("numberOfDaysInvoicedOrQuantity", False, False, None),
     "work_unit_rate": ("workUnitRate", False, False, None),
-    "purchase_price_excluding_tax": ("purchasePriceExcludingTax", False, False, None),
-    "billing_mode": ("billingMode", False, False, None),
-    "comments": ("comments", False, False, None),
+    "comments": ("informationComments", False, False, None),
     "contact_id": ("contact", False, True, "contact"),
-    "groupment_id": ("groupment", False, True, "groupment"),
     "positioning_id": ("positioning", False, True, "positioning"),
 }
 
@@ -140,6 +138,7 @@ ENTITY_CONFIGS = {
         "endpoint": "/deliveries",
         "template_fields": [
             "project_id", "resource_id", "title", "start_date", "end_date",
+            "average_daily_price_excluding_tax", "number_of_days_invoiced",
         ],
     },
     "orders": {
