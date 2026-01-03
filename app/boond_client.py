@@ -274,7 +274,7 @@ class BoondClient:
         if entity_type == "projects":
             opportunity_id = row_data.get("opportunity_id")
             mode = row_data.get("mode")
-            resource_id = row_data.get("resource_id")  # Candidat/ressource pour le positionnement
+            resource_id = row_data.get("ressource_id")  # Candidat/ressource pour le positionnement
             main_manager_id = row_data.get("main_manager_id")  # Manager de l'opportunity
             contact_id = row_data.get("contact_id")
             company_id = row_data.get("company_id")
@@ -283,7 +283,7 @@ class BoondClient:
             # If mode is not fixed(1) or product(2), we need positioning
             if mode not in (1, 2, "1", "2"):
                 if not resource_id:
-                    return False, None, "resource_id requis pour créer un positionnement"
+                    return False, None, "ressource_id requis pour créer un positionnement"
 
                 # If no opportunity provided, create one first
                 if not opportunity_id:
