@@ -48,6 +48,7 @@ DELIVERY_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "average_daily_price_excluding_tax": ("averageDailyPriceExcludingTax", False, False, None),
     "force_average_daily_price": ("forceAverageDailyPriceExcludingTax", False, False, None),
     "number_of_days_invoiced": ("numberOfDaysInvoicedOrQuantity", False, False, None),
+    "number_of_days_free": ("numberOfDaysFree", False, False, None),
     "work_unit_rate": ("workUnitRate", False, False, None),
     "comments": ("informationComments", False, False, None),
     "contact_id": ("contact", False, True, "contact"),
