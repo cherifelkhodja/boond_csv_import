@@ -298,7 +298,13 @@ function parseCSVLine(line, delimiter = ',') {
         const char = line[i];
 
         if (char === '"') {
-            inQuotes = !inQuotes;
+            if (inQuotes && line[i + 1] === '"') {
+                // Escaped quote inside quoted string
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
         } else if (char === delimiter && !inQuotes) {
             result.push(current.trim());
             current = '';
