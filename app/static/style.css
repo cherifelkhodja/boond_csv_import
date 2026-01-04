@@ -275,10 +275,14 @@ main {
 .table-container {
     overflow-x: auto;
     margin: 1rem 0;
+    max-width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
 }
 
 table {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
 }
