@@ -128,6 +128,46 @@ PURCHASE_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "main_manager_id": ("mainManager", False, True, "resource"),
 }
 
+# Contract fields - dependsOn is handled specially (resource OR candidate)
+CONTRACT_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
+    # Required relationship - either resource_id or candidate_id must be provided
+    "resource_id": ("dependsOn", False, True, "resource"),  # Handled specially
+    "candidate_id": ("dependsOn", False, True, "candidate"),  # Handled specially
+    # Optional relationships
+    "agency_id": ("agency", False, True, "agency"),
+    "parent_contract_id": ("parentContract", False, True, "contract"),
+    # General information
+    "type_of": ("typeOf", False, False, None),
+    "employee_type": ("employeeType", False, False, None),
+    "working_time_type": ("workingTimeType", False, False, None),
+    "classification": ("classification", False, False, None),
+    "comments": ("informationComments", False, False, None),
+    # Dates
+    "start_date": ("startDate", False, False, None),
+    "end_date": ("endDate", False, False, None),
+    "probation_end_date": ("probationEndDate", False, False, None),
+    "renewal_probation_end_date": ("renewalProbationEndDate", False, False, None),
+    "probation_state": ("probationState", False, False, None),
+    # Working time
+    "hours_per_week": ("numberOfHoursPerWeek", False, False, None),
+    "working_days": ("numberOfWorkingDays", False, False, None),
+    "activity_rate": ("activityRate", False, False, None),
+    "calendar": ("calendar", False, False, None),
+    # Salary
+    "monthly_salary": ("monthlySalary", False, False, None),
+    "hourly_salary": ("hourlySalary", False, False, None),
+    "force_hourly_salary": ("forceHourlySalary", False, False, None),
+    "charge_factor": ("chargeFactor", False, False, None),
+    # Costs (external resources)
+    "force_daily_cost": ("forceContractAverageDailyProductionCost", False, False, None),
+    "daily_production_cost": ("contractAverageDailyProductionCost", False, False, None),
+    "daily_expenses": ("dailyExpenses", False, False, None),
+    "monthly_expenses": ("monthlyExpenses", False, False, None),
+    # Currency
+    "currency": ("currency", False, False, None),
+    "exchange_rate": ("exchangeRate", False, False, None),
+}
+
 # Entity type configurations
 ENTITY_CONFIGS = {
     "projects": {
@@ -163,6 +203,20 @@ ENTITY_CONFIGS = {
         "endpoint": "/purchases",
         "template_fields": [
             "project_id", "title", "amount_excluding_tax", "date",
+        ],
+    },
+    "contracts": {
+        "fields": CONTRACT_FIELDS,
+        "api_type": "contract",
+        "endpoint": "/contracts",
+        "template_fields": [
+            "resource_id", "candidate_id", "agency_id", "type_of", "employee_type",
+            "working_time_type", "classification", "start_date", "end_date",
+            "probation_state", "probation_end_date", "renewal_probation_end_date",
+            "hours_per_week", "working_days", "activity_rate", "calendar",
+            "monthly_salary", "hourly_salary", "force_hourly_salary", "charge_factor",
+            "force_daily_cost", "daily_production_cost", "daily_expenses", "monthly_expenses",
+            "currency", "exchange_rate", "parent_contract_id", "comments",
         ],
     },
 }

@@ -26,6 +26,15 @@ const ENTITY_CONFIG = {
         requiredFields: ['project_id', 'title', 'amount_excluding_tax'],
         label: 'Purchases',
         notes: []
+    },
+    contracts: {
+        requiredFields: ['resource_id ou candidate_id'],
+        label: 'Contracts',
+        notes: [
+            'resource_id OU candidate_id obligatoire (pas les deux)',
+            'Les contrats sont tries par start_date pour gerer les renouvellements',
+            'Si plusieurs contrats pour une meme ressource sans parent_contract_id, ils sont chaines automatiquement'
+        ]
     }
 };
 

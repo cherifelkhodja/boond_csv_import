@@ -1,0 +1,4 @@
+resource_id,candidate_id,agency_id,type_of,employee_type,working_time_type,classification,start_date,end_date,probation_state,probation_end_date,renewal_probation_end_date,hours_per_week,working_days,activity_rate,calendar,monthly_salary,hourly_salary,force_hourly_salary,charge_factor,force_daily_cost,daily_production_cost,daily_expenses,monthly_expenses,currency,exchange_rate,parent_contract_id,comments
+50,,1,1,1,1,ETAM 2.2,2024-02-01,,1,2024-06-01,2024-08-01,35,218,100,france,3500,,false,1.45,false,,,,,1,,CDI Developpeur Senior
+55,,1,2,1,1,ETAM 2.1,2024-03-01,2024-08-31,1,2024-04-01,,35,218,100,france,2800,,false,1.45,false,,,,,1,,CDD 6 mois
+60,,1,5,,,,,2024-01-15,2024-12-31,,,,,,,,,,false,,true,450,,,0,1,,Freelance developpeur

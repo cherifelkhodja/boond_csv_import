@@ -73,6 +73,10 @@ class BoondClient:
             if csv_field == "delivery_ids":
                 continue
 
+            # Skip resource_id and candidate_id for contracts - handled specially
+            if entity_type == "contracts" and csv_field in ("resource_id", "candidate_id"):
+                continue
+
             if is_relationship:
                 relationships[api_name] = {
                     "data": {
@@ -96,6 +100,24 @@ class BoondClient:
         # For deliveries: auto-set forceAverageDailyPriceExcludingTax when TJM is provided
         if entity_type == "deliveries" and "averageDailyPriceExcludingTax" in attributes:
             attributes["forceAverageDailyPriceExcludingTax"] = True
+
+        # For contracts: build dependsOn relationship from resource_id or candidate_id
+        if entity_type == "contracts":
+            resource_id = row_data.get("resource_id")
+            candidate_id = row_data.get("candidate_id")
+
+            if resource_id:
+                if "relationships" not in payload["data"]:
+                    payload["data"]["relationships"] = {}
+                payload["data"]["relationships"]["dependsOn"] = {
+                    "data": {"type": "resource", "id": str(resource_id)}
+                }
+            elif candidate_id:
+                if "relationships" not in payload["data"]:
+                    payload["data"]["relationships"] = {}
+                payload["data"]["relationships"]["dependsOn"] = {
+                    "data": {"type": "candidate", "id": str(candidate_id)}
+                }
 
         return payload
 

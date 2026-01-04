@@ -101,6 +101,8 @@ def validate_value(
         "attach_signed_timesheets", "attach_unsigned_timesheets",
         "attach_expenses", "request_timesheets_signature",
         "merge_invoice_attachments", "rebillable",
+        # Contract boolean fields
+        "force_hourly_salary", "force_daily_cost",
     }
     if field_name in boolean_fields:
         if value.lower() not in TRUE_VALUES | FALSE_VALUES:
@@ -113,12 +115,30 @@ def validate_value(
         "average_daily_price_excluding_tax", "purchase_price_excluding_tax",
         "turnover_excluding_tax", "turnover_including_tax", "tax_rate",
         "amount_excluding_tax", "amount_including_tax", "rebillable_rate",
+        # Contract decimal fields
+        "monthly_salary", "hourly_salary", "charge_factor",
+        "daily_production_cost", "daily_expenses", "monthly_expenses",
+        "hours_per_week", "activity_rate",
     }
     if field_name in decimal_fields:
         try:
             float(value)
         except ValueError:
             return "Valeur numérique invalide"
+
+    # Contract-specific validations
+    if field_name == "hours_per_week":
+        hours = float(value)
+        if hours < 0 or hours > 168:
+            return "hours_per_week doit être entre 0 et 168"
+
+    if field_name == "working_days":
+        try:
+            days = int(value)
+            if days < 1 or days > 365:
+                return "working_days doit être entre 1 et 365"
+        except ValueError:
+            return "working_days doit être un entier"
 
     return None
 
@@ -153,6 +173,61 @@ def validate_csv_data(
                         row=row_num,
                         field=field,
                         error="Champ requis manquant",
+                    )
+                )
+
+        # Contract-specific validation: resource_id OR candidate_id required
+        if entity_type == "contracts":
+            has_resource = bool(row.get("resource_id", "").strip())
+            has_candidate = bool(row.get("candidate_id", "").strip())
+            if not has_resource and not has_candidate:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        field="resource_id/candidate_id",
+                        error="resource_id ou candidate_id obligatoire",
+                    )
+                )
+            if has_resource and has_candidate:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        field="resource_id/candidate_id",
+                        error="Renseigner resource_id OU candidate_id, pas les deux",
+                    )
+                )
+
+            # Validate dates
+            start_date = row.get("start_date", "").strip()
+            end_date = row.get("end_date", "").strip()
+            if start_date and end_date and start_date > end_date:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        field="end_date",
+                        error="start_date doit être <= end_date",
+                    )
+                )
+
+            probation_end_date = row.get("probation_end_date", "").strip()
+            if probation_end_date and start_date and probation_end_date < start_date:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        field="probation_end_date",
+                        error="probation_end_date doit être >= start_date",
+                    )
+                )
+
+            # Validate force_daily_cost requires daily_production_cost
+            force_daily_cost = row.get("force_daily_cost", "").strip().lower()
+            daily_production_cost = row.get("daily_production_cost", "").strip()
+            if force_daily_cost in TRUE_VALUES and not daily_production_cost:
+                errors.append(
+                    ValidationError(
+                        row=row_num,
+                        field="daily_production_cost",
+                        error="daily_production_cost requis si force_daily_cost=true",
                     )
                 )
 
@@ -209,6 +284,8 @@ def convert_row_values(
             "attach_signed_timesheets", "attach_unsigned_timesheets",
             "attach_expenses", "request_timesheets_signature",
             "merge_invoice_attachments", "rebillable", "force_average_daily_price",
+            # Contract boolean fields
+            "force_hourly_salary", "force_daily_cost",
         }
         if field in boolean_fields:
             converted[field] = value.lower() in TRUE_VALUES
@@ -222,6 +299,10 @@ def convert_row_values(
             "turnover_excluding_tax", "turnover_including_tax", "tax_rate",
             "amount_excluding_tax", "amount_including_tax", "rebillable_rate",
             "work_unit_rate", "exchange_rate",
+            # Contract decimal fields
+            "monthly_salary", "hourly_salary", "charge_factor",
+            "daily_production_cost", "daily_expenses", "monthly_expenses",
+            "hours_per_week", "activity_rate",
         }
         if field in decimal_fields:
             try:
@@ -243,6 +324,9 @@ def convert_row_values(
             "type_of", "state", "mode", "billing_mode", "billing_type",
             "payment_terms", "payment_method", "language",
             "number_of_days_free", "number_of_days_invoiced",
+            # Contract integer fields
+            "employee_type", "working_time_type", "probation_state",
+            "working_days", "currency",
         }
         if field in integer_fields:
             try:
