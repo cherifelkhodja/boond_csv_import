@@ -1,7 +1,6 @@
 """Router for Contracts entity with special handling for renewals."""
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import Response
@@ -63,44 +62,14 @@ async def validate_csv(file: UploadFile = File(...)) -> ValidationResponse:
     return validate_csv_data("contracts", rows)
 
 
-def sort_rows_for_renewals(rows: list[dict[str, str]]) -> list[dict[str, str]]:
-    """
-    Sort contract rows to handle renewals properly.
-
-    Rows without parent_contract_id come first (initial contracts),
-    sorted by start_date. This ensures parent contracts are created
-    before their renewals.
-
-    Groups rows by resource_id/candidate_id for processing renewals together.
-    """
-    # Separate initial contracts and renewals
-    initial_contracts: list[dict[str, str]] = []
-    renewals: list[dict[str, str]] = []
-
-    for row in rows:
-        if row.get("parent_contract_id", "").strip():
-            renewals.append(row)
-        else:
-            initial_contracts.append(row)
-
-    # Sort initial contracts by start_date
-    initial_contracts.sort(key=lambda r: r.get("start_date", "") or "")
-
-    # Sort renewals by start_date
-    renewals.sort(key=lambda r: r.get("start_date", "") or "")
-
-    # Return initial contracts first, then renewals
-    return initial_contracts + renewals
-
-
 def group_rows_by_person(
     rows: list[dict[str, str]],
 ) -> dict[str, list[dict[str, str]]]:
     """
-    Group rows by resource_id or candidate_id.
+    Group rows by resource_id or candidate_id and sort by start_date.
 
-    This helps identify which contracts belong to the same person
-    for automatic renewal linking.
+    This ensures contracts for the same person are processed together,
+    with the oldest contract first (initial) and subsequent ones as renewals.
     """
     groups: dict[str, list[dict[str, str]]] = {}
 
@@ -120,9 +89,9 @@ def group_rows_by_person(
             groups[key] = []
         groups[key].append(row)
 
-    # Sort each group by start_date
+    # Sort each group by start_date (oldest first = initial contract)
     for key in groups:
-        groups[key].sort(key=lambda r: r.get("start_date", "") or "")
+        groups[key].sort(key=lambda r: r.get("start_date", "") or "9999-99-99")
 
     return groups
 
@@ -132,10 +101,12 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
     """
     Import CSV file into BoondManager with automatic renewal handling.
 
-    Contracts are sorted by start_date and grouped by resource/candidate.
-    For each person, if multiple contracts exist without parent_contract_id,
-    the first one (by start_date) is created as initial contract,
-    and subsequent ones are linked as renewals.
+    Contracts are grouped by resource_id/candidate_id and sorted by start_date.
+    For each person:
+    - The first contract (oldest start_date) = initial contract
+    - Subsequent contracts = renewals linked to the previous one
+
+    If parent_contract_id is already specified in CSV, it takes precedence.
     """
     content = await file.read()
     try:
@@ -181,23 +152,34 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
     # Create a mapping of original row index
     row_to_index: dict[int, int] = {id(row): idx + 1 for idx, row in enumerate(rows)}
 
-    # Process each person's contracts in order
+    # Process each person's contracts in order (sorted by start_date)
     for person_key, person_rows in person_groups.items():
+        is_first_for_person = True
+
         for row in person_rows:
             row_num = row_to_index[id(row)]
             converted_row = convert_row_values(row, "contracts")
 
-            # If no parent_contract_id but we have a previous contract for this person,
-            # automatically link as renewal
+            # Determine if this is a renewal
             parent_contract_id = converted_row.get("parent_contract_id")
-            if not parent_contract_id and person_key in last_contract_by_person:
+            result_message = None
+
+            if parent_contract_id:
+                # Manual linking from CSV - use as-is
+                result_message = f"Renouvellement (parent: {parent_contract_id})"
+            elif not is_first_for_person and person_key in last_contract_by_person:
+                # Auto-link as renewal of previous contract for same resource
                 converted_row["parent_contract_id"] = int(
                     last_contract_by_person[person_key]
                 )
+                result_message = f"Renouvellement auto (parent: {last_contract_by_person[person_key]})"
                 logger.info(
                     f"Row {row_num}: Auto-linking as renewal of contract "
-                    f"{last_contract_by_person[person_key]}"
+                    f"{last_contract_by_person[person_key]} for {person_key}"
                 )
+            else:
+                # First contract for this person
+                result_message = "Contrat initial"
 
             success, entity_id, error_msg = await client.create_entity(
                 "contracts", converted_row
@@ -210,15 +192,16 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
                         row=row_num,
                         status="success",
                         id=entity_id,
-                        message=None,
+                        message=result_message,
                         original_data=row,
                     )
                 )
-                logger.info(f"Row {row_num}: Created contract with ID {entity_id}")
+                logger.info(f"Row {row_num}: Created contract with ID {entity_id} ({result_message})")
 
                 # Store for potential renewal linking
                 created_contracts[(person_key, row_num)] = entity_id
                 last_contract_by_person[person_key] = entity_id
+                is_first_for_person = False
             else:
                 failed_count += 1
                 results.append(
