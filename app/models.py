@@ -53,6 +53,11 @@ DELIVERY_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "comments": ("informationComments", False, False, None),
     "contact_id": ("contact", False, True, "contact"),
     "positioning_id": ("positioning", False, True, "positioning"),
+    # Order fields - used for auto-creating order after delivery
+    "order_number": ("_order_number", False, False, None),
+    "order_informationComments": ("_order_comments", False, False, None),
+    "order_billingDetail": ("_order_billingDetail", False, False, None),
+    "order_bankDetail": ("_order_bankDetail", False, False, None),
 }
 
 ORDER_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
@@ -141,6 +146,7 @@ ENTITY_CONFIGS = {
         "template_fields": [
             "project_id", "resource_id", "title", "start_date", "end_date",
             "average_daily_price_excluding_tax", "number_of_days_invoiced", "number_of_days_free",
+            "order_number", "order_informationComments", "order_billingDetail", "order_bankDetail",
         ],
     },
     "orders": {

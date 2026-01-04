@@ -350,10 +350,13 @@ class BoondClient:
                         if delivery_ids:
                             await self._link_order_deliveries(entity_id, delivery_ids)
 
-                    # For deliveries: auto-create purchase for external consultants (typeOf 1 or 10)
+                    # For deliveries: auto-create purchase (if external) and order
                     if entity_type == "deliveries":
                         resource_id = row_data.get("resource_id")
                         project_id = row_data.get("project_id")
+                        order_number = row_data.get("order_number")
+                        purchase_id = None
+
                         if resource_id and project_id:
                             success, resource_data, _ = await self._get_resource_info(resource_id)
                             if success and resource_data:
@@ -372,6 +375,17 @@ class BoondClient:
                                         logger.info(f"Auto-created purchase {purchase_id} for external consultant")
                                     else:
                                         logger.warning(f"Failed to auto-create purchase: {purchase_error}")
+                                        purchase_id = None
+
+                        # Create order if order_number is provided
+                        if order_number and project_id:
+                            order_success, order_id, order_error = await self._create_order_for_delivery(
+                                entity_id, project_id, purchase_id, row_data
+                            )
+                            if order_success:
+                                logger.info(f"Auto-created order {order_id} for delivery {entity_id}")
+                            else:
+                                logger.warning(f"Failed to auto-create order: {order_error}")
 
                     return True, entity_id, None
                 else:
@@ -509,6 +523,94 @@ class BoondClient:
                 else:
                     error_data = response.json() if response.content else {}
                     logger.warning(f"Purchase API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                return False, None, str(e)
+
+    async def _create_order_for_delivery(
+        self,
+        delivery_id: str,
+        project_id: str,
+        purchase_id: str | None,
+        row_data: dict[str, Any],
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create an order linked to a delivery (and purchase if external consultant).
+
+        Returns: (success, order_id, error_message)
+        """
+        # Get order fields from row_data
+        order_number = row_data.get("order_number", "")
+        order_comments = row_data.get("order_informationComments", "")
+        billing_detail_id = row_data.get("order_billingDetail")
+        bank_detail_id = row_data.get("order_bankDetail")
+        start_date = row_data.get("start_date", "")
+        tjm = row_data.get("average_daily_price_excluding_tax", 0)
+        nb_days = row_data.get("number_of_days_invoiced", 0)
+
+        # Calculate turnover
+        turnover = float(tjm) * float(nb_days) if tjm and nb_days else 0
+
+        # Build deliveriesPurchases based on whether purchase exists
+        deliveries_purchases = [{"type": "delivery", "id": str(delivery_id)}]
+        if purchase_id:
+            deliveries_purchases.append({"type": "purchase", "id": str(purchase_id)})
+
+        payload: dict[str, Any] = {
+            "data": {
+                "type": "order",
+                "attributes": {
+                    "number": order_number,
+                    "date": start_date,
+                    "state": 1,
+                    "customerAgreement": True,
+                    "turnoverOrderedExcludingTax": turnover,
+                    "informationComments": order_comments,
+                },
+                "relationships": {
+                    "project": {
+                        "data": {"type": "project", "id": str(project_id)}
+                    },
+                    "deliveriesPurchases": {
+                        "data": deliveries_purchases
+                    },
+                },
+            }
+        }
+
+        # Add billingDetail if provided
+        if billing_detail_id:
+            payload["data"]["relationships"]["billingDetail"] = {
+                "data": {"type": "detail", "id": str(billing_detail_id)}
+            }
+
+        # Add bankDetail if provided
+        if bank_detail_id:
+            payload["data"]["relationships"]["bankDetail"] = {
+                "data": {"type": "bankdetail", "id": str(bank_detail_id)}
+            }
+
+        logger.info(f"Creating order for delivery {delivery_id} with payload: {payload}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/orders",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    order_id = data.get("data", {}).get("id")
+                    logger.info(f"Created order {order_id} for delivery {delivery_id}")
+                    return True, order_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Order API response: {error_data}")
                     error_msg = self._extract_error_message(error_data, response.status_code)
                     return False, None, error_msg
 
