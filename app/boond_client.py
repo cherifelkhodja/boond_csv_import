@@ -953,10 +953,10 @@ class BoondClient:
         if end_date:
             attributes["endDate"] = end_date
 
-        # Add salary/cost based on typeOf
-        if type_of == 0 and monthly_salary is not None:
+        # Add salary and/or daily cost if provided
+        if monthly_salary is not None:
             attributes["monthlySalary"] = monthly_salary
-        elif daily_cost is not None:
+        if daily_cost is not None:
             attributes["contractAverageDailyProductionCost"] = daily_cost
 
         # Build relationships
