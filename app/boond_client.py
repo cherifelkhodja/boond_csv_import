@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 # Documents folder path (relative to project root)
 DOCUMENTS_FOLDER = Path(__file__).parent.parent / "documents"
+
+# Regex to extract first CTR reference from filename
+CTR_PATTERN = re.compile(r"(CTR\d+)", re.IGNORECASE)
 
 
 class BoondClient:
@@ -663,8 +667,12 @@ class BoondClient:
         Find a document in ./documents/ folder matching order_number or 'Contrat'.
 
         Search criteria (case insensitive):
-        - File name contains order_number (if not empty or "PO")
+        - First CTR reference in filename matches order_number (if not empty or "PO")
         - OR file name contains 'Contrat'
+
+        For filenames with multiple CTR references like:
+        "CTR147730_-_Avenant_au_Contrat_N__CTR137233..."
+        Only the first reference (CTR147730) is considered for matching.
 
         If multiple files match, returns the most recently modified one.
 
@@ -683,17 +691,26 @@ class BoondClient:
             if not file_path.is_file():
                 continue
 
-            file_name_lower = file_path.name.lower()
+            file_name = file_path.name
+            file_name_lower = file_name.lower()
 
-            # Check if file matches order_number or contains "contrat"
-            if effective_order_number and effective_order_number.lower() in file_name_lower:
+            # Extract first CTR reference from filename
+            ctr_match = CTR_PATTERN.search(file_name)
+            first_ctr = ctr_match.group(1).upper() if ctr_match else None
+
+            # Check if first CTR reference matches order_number
+            if effective_order_number and first_ctr:
+                if effective_order_number.upper() == first_ctr:
+                    mtime = file_path.stat().st_mtime
+                    matching_files.append((file_path, mtime))
+                    logger.debug(f"Found matching file (first CTR={first_ctr}): {file_name}")
+                    continue
+
+            # Fallback: check if contains "contrat"
+            if "contrat" in file_name_lower:
                 mtime = file_path.stat().st_mtime
                 matching_files.append((file_path, mtime))
-                logger.debug(f"Found matching file (order_number): {file_path.name}")
-            elif "contrat" in file_name_lower:
-                mtime = file_path.stat().st_mtime
-                matching_files.append((file_path, mtime))
-                logger.debug(f"Found matching file (contrat): {file_path.name}")
+                logger.debug(f"Found matching file (contrat): {file_name}")
 
         if not matching_files:
             logger.info(f"No document found for order_number={order_number}")
