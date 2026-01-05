@@ -191,7 +191,6 @@ async def _update_contracts_for_last_deliveries(
        - Update that contract with endDate and endReason=4
     """
     contract_updates = []
-    today = date.today()
 
     # Group deliveries by project_id
     deliveries_by_project: dict[str, list[dict]] = defaultdict(list)
@@ -221,11 +220,11 @@ async def _update_contracts_for_last_deliveries(
                 logger.warning(f"Invalid end_date format: {end_date_str}")
                 continue
 
-        # Check conditions: end_date > today AND end_date < 31/12/2025
-        if not (end_date > today and end_date < CUTOFF_DATE):
+        # Check condition: end_date < 31/12/2025
+        if not (end_date < CUTOFF_DATE):
             logger.info(
-                f"Project {project_id}: end_date {end_date} not in range "
-                f"(today={today}, cutoff={CUTOFF_DATE}), skipping contract update"
+                f"Project {project_id}: end_date {end_date} >= cutoff {CUTOFF_DATE}, "
+                f"skipping contract update"
             )
             continue
 
