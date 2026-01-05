@@ -58,7 +58,7 @@ async def validate_csv(file: UploadFile = File(...)) -> ValidationResponse:
     except UnicodeDecodeError:
         text_content = content.decode("latin-1")
 
-    _, rows = parse_csv(text_content, "contracts")
+    _, rows = parse_csv(text_content)
     return validate_csv_data("contracts", rows)
 
 
@@ -114,7 +114,7 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
     except UnicodeDecodeError:
         text_content = content.decode("latin-1")
 
-    _, rows = parse_csv(text_content, "contracts")
+    _, rows = parse_csv(text_content)
 
     # Validate first
     validation = validate_csv_data("contracts", rows)

@@ -30,49 +30,18 @@ def detect_delimiter(content: str) -> str:
     return ';' if semicolons > commas else ','
 
 
-def parse_csv(content: str, entity_type: str | None = None) -> tuple[list[str], list[dict[str, str]]]:
+def parse_csv(content: str) -> tuple[list[str], list[dict[str, str]]]:
     """
     Parse CSV content into headers and rows.
     Automatically detects delimiter (comma or semicolon).
-
-    If entity_type is provided, filters out unknown columns and empty rows.
 
     Returns: (headers, list of row dicts)
     """
     delimiter = detect_delimiter(content)
     reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
     headers = reader.fieldnames or []
-
-    # Filter headers to only include known fields if entity_type is provided
-    known_fields: set[str] = set()
-    if entity_type:
-        from app.models import ENTITY_CONFIGS
-        config = ENTITY_CONFIGS.get(entity_type)
-        if config:
-            known_fields = set(config["fields"].keys())
-
-    # Filter headers - keep only known fields (or all if no entity_type)
-    if known_fields:
-        filtered_headers = [h for h in headers if h in known_fields]
-    else:
-        filtered_headers = headers
-
-    # Parse rows, filtering to only known columns
-    rows = []
-    for row in reader:
-        if known_fields:
-            # Only keep known fields
-            filtered_row = {k: v for k, v in row.items() if k in known_fields}
-        else:
-            filtered_row = dict(row)
-
-        # Skip completely empty rows
-        if all(not v or not v.strip() for v in filtered_row.values()):
-            continue
-
-        rows.append(filtered_row)
-
-    return filtered_headers, rows
+    rows = list(reader)
+    return headers, rows
 
 
 def get_required_fields(entity_type: str) -> list[str]:
