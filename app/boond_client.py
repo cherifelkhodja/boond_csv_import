@@ -413,7 +413,7 @@ class BoondClient:
                                 logger.info(f"Auto-created order {order_id} for delivery {entity_id}")
 
                                 # Try to upload documents to the order
-                                contrat = row_data.get("contrat", "")
+                                contrat = row_data.get("contrat", "") or row_data.get("Contrat", "")
                                 doc_paths = self._find_documents_for_order(order_number, contrat)
                                 for doc_path in doc_paths:
                                     doc_success, doc_error = await self._upload_document_to_order(
