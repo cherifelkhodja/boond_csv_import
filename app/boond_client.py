@@ -673,9 +673,16 @@ class BoondClient:
 
         Returns: List of paths to matching files (one per reference that matched).
         """
+        logger.info(f"Searching documents in: {DOCUMENTS_FOLDER}")
+        logger.info(f"order_number='{order_number}', contrat='{contrat}'")
+
         if not DOCUMENTS_FOLDER.exists():
             logger.warning(f"Documents folder not found: {DOCUMENTS_FOLDER}")
             return []
+
+        # List all files in folder for debugging
+        all_files = [f.name for f in DOCUMENTS_FOLDER.iterdir() if f.is_file()]
+        logger.info(f"Files in documents folder: {all_files}")
 
         # Build list of references to search for
         search_refs: list[str] = []
@@ -683,6 +690,8 @@ class BoondClient:
             search_refs.append(order_number)
         if contrat:
             search_refs.append(contrat)
+
+        logger.info(f"Search references: {search_refs}")
 
         if not search_refs:
             logger.info("No order_number or contrat provided for document search")
