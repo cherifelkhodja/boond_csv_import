@@ -40,14 +40,14 @@ async def get_fields() -> dict:
             {"name": "resource_id", "required": True, "description": "Resource ID (dependsOn)"},
             {"name": "contract_typeOf", "required": True, "description": "Contract type (0=salarié, 1=externe, etc.)"},
             {"name": "contract_start_date", "required": True, "description": "Start date (YYYY-MM-DD)"},
-            {"name": "contract_end_date", "required": True, "description": "End date (YYYY-MM-DD)"},
+            {"name": "contract_end_date", "required": False, "description": "End date (YYYY-MM-DD)"},
             {"name": "contract_monthly_salary", "required": False, "description": "Monthly salary (if typeOf=0)"},
             {"name": "contract_daily_production_cost", "required": False, "description": "Daily cost (if typeOf!=0)"},
             {"name": "contract_renewal", "required": False, "description": "VRAI/FAUX - link to previous contract"},
             {"name": "resource_name", "required": False, "description": "Informational only"},
             {"name": "resource_type", "required": False, "description": "Informational only"},
         ],
-        "required_fields": ["resource_id", "contract_typeOf", "contract_start_date", "contract_end_date"],
+        "required_fields": ["resource_id", "contract_typeOf", "contract_start_date"],
     }
 
 
@@ -63,7 +63,7 @@ async def validate_csv(file: UploadFile = File(...)) -> dict:
     _, rows = parse_csv(text_content)
 
     errors = []
-    required_fields = ["resource_id", "contract_typeOf", "contract_start_date", "contract_end_date"]
+    required_fields = ["resource_id", "contract_typeOf", "contract_start_date"]
 
     for idx, row in enumerate(rows, start=1):
         for field in required_fields:
@@ -123,7 +123,7 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
     _, rows = parse_csv(text_content)
 
     # Validate first
-    required_fields = ["resource_id", "contract_typeOf", "contract_start_date", "contract_end_date"]
+    required_fields = ["resource_id", "contract_typeOf", "contract_start_date"]
     errors = []
     for idx, row in enumerate(rows, start=1):
         for field in required_fields:
@@ -194,7 +194,7 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
                 resource_id=resource_id,
                 type_of=type_of,
                 start_date=start_date,
-                end_date=end_date,
+                end_date=end_date if end_date else None,
                 monthly_salary=float(monthly_salary) if monthly_salary else None,
                 daily_cost=float(daily_cost) if daily_cost else None,
                 parent_contract_id=parent_contract_id,

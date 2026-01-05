@@ -48,7 +48,7 @@ const ENTITY_CONFIG = {
         ]
     },
     'resource-contracts': {
-        requiredFields: ['resource_id', 'contract_typeOf', 'contract_start_date', 'contract_end_date'],
+        requiredFields: ['resource_id', 'contract_typeOf', 'contract_start_date'],
         label: 'Resource Contracts',
         notes: [
             'Cree des contrats pour les ressources',

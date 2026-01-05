@@ -925,7 +925,7 @@ class BoondClient:
         resource_id: str,
         type_of: int,
         start_date: str,
-        end_date: str,
+        end_date: str | None = None,
         monthly_salary: float | None = None,
         daily_cost: float | None = None,
         parent_contract_id: str | None = None,
@@ -937,7 +937,7 @@ class BoondClient:
             resource_id: The resource ID (dependsOn)
             type_of: Contract type (0=salarié uses monthly_salary, other uses daily_cost)
             start_date: Contract start date (YYYY-MM-DD)
-            end_date: Contract end date (YYYY-MM-DD)
+            end_date: Contract end date (YYYY-MM-DD) - optional
             monthly_salary: Monthly salary (used if typeOf=0)
             daily_cost: Daily production cost (used if typeOf!=0)
             parent_contract_id: Parent contract ID for renewals
@@ -948,8 +948,9 @@ class BoondClient:
         attributes: dict[str, Any] = {
             "typeOf": type_of,
             "startDate": start_date,
-            "endDate": end_date,
         }
+        if end_date:
+            attributes["endDate"] = end_date
 
         # Add salary/cost based on typeOf
         if type_of == 0 and monthly_salary is not None:
