@@ -1,6 +1,8 @@
 """BoondManager API client for REST operations."""
 
 import logging
+import os
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -9,6 +11,9 @@ from app.config import get_settings
 from app.models import ENTITY_CONFIGS
 
 logger = logging.getLogger(__name__)
+
+# Documents folder path (relative to project root)
+DOCUMENTS_FOLDER = Path(__file__).parent.parent / "documents"
 
 
 class BoondClient:
@@ -406,6 +411,17 @@ class BoondClient:
                             )
                             if order_success:
                                 logger.info(f"Auto-created order {order_id} for delivery {entity_id}")
+
+                                # Try to upload document to the order
+                                doc_path = self._find_document_for_order(order_number)
+                                if doc_path:
+                                    doc_success, doc_error = await self._upload_document_to_order(
+                                        order_id, doc_path
+                                    )
+                                    if doc_success:
+                                        logger.info(f"Uploaded document to order {order_id}")
+                                    else:
+                                        logger.warning(f"Failed to upload document: {doc_error}")
                             else:
                                 logger.warning(f"Failed to auto-create order: {order_error}")
 
@@ -638,6 +654,101 @@ class BoondClient:
 
             except Exception as e:
                 return False, None, str(e)
+
+    def _find_document_for_order(
+        self,
+        order_number: str,
+    ) -> Path | None:
+        """
+        Find a document in ./documents/ folder matching order_number or 'Contrat'.
+
+        Search criteria (case insensitive):
+        - File name contains order_number
+        - OR file name contains 'Contrat'
+
+        If multiple files match, returns the most recently modified one.
+
+        Returns: Path to the file or None if not found.
+        """
+        if not DOCUMENTS_FOLDER.exists():
+            logger.warning(f"Documents folder not found: {DOCUMENTS_FOLDER}")
+            return None
+
+        matching_files: list[tuple[Path, float]] = []
+
+        for file_path in DOCUMENTS_FOLDER.iterdir():
+            if not file_path.is_file():
+                continue
+
+            file_name_lower = file_path.name.lower()
+
+            # Check if file matches order_number or contains "contrat"
+            if order_number and order_number.lower() in file_name_lower:
+                mtime = file_path.stat().st_mtime
+                matching_files.append((file_path, mtime))
+                logger.debug(f"Found matching file (order_number): {file_path.name}")
+            elif "contrat" in file_name_lower:
+                mtime = file_path.stat().st_mtime
+                matching_files.append((file_path, mtime))
+                logger.debug(f"Found matching file (contrat): {file_path.name}")
+
+        if not matching_files:
+            logger.info(f"No document found for order_number={order_number}")
+            return None
+
+        # Sort by modification time (most recent first) and return the first
+        matching_files.sort(key=lambda x: x[1], reverse=True)
+        selected_file = matching_files[0][0]
+        logger.info(f"Selected document for upload: {selected_file.name}")
+        return selected_file
+
+    async def _upload_document_to_order(
+        self,
+        order_id: str,
+        file_path: Path,
+    ) -> tuple[bool, str | None]:
+        """
+        Upload a document to an order via POST /documents.
+
+        Uses multipart/form-data with:
+        - file: the document file
+        - parentType: "order"
+        - parentId: the order ID
+
+        Returns: (success, error_message)
+        """
+        if not file_path.exists():
+            return False, f"File not found: {file_path}"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path.name, f, "application/octet-stream")}
+                    data = {
+                        "parentType": "order",
+                        "parentId": str(order_id),
+                    }
+
+                    response = await client.post(
+                        f"{self.base_url}/documents",
+                        files=files,
+                        data=data,
+                        auth=self.auth,
+                        headers={"Accept": "application/json"},
+                    )
+
+                if response.status_code in (200, 201):
+                    logger.info(f"Uploaded document {file_path.name} to order {order_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Document upload API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to upload document: {e}")
+                return False, str(e)
 
     def _extract_error_message(
         self,
