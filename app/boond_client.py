@@ -781,6 +781,145 @@ class BoondClient:
                 logger.error(f"Failed to upload document: {e}")
                 return False, str(e)
 
+    async def update_resource_type(
+        self,
+        resource_id: str,
+        type_of: int,
+    ) -> tuple[bool, str | None]:
+        """
+        Update resource type via PUT /resources/{resource_id}/informations.
+
+        Args:
+            resource_id: The resource ID
+            type_of: The type ID to set
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "resource",
+                "id": str(resource_id),
+                "attributes": {
+                    "typeOf": type_of,
+                },
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/resources/{resource_id}/information",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    logger.info(f"Updated resource {resource_id} type to {type_of}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update resource type: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update resource type: {e}")
+                return False, str(e)
+
+    async def get_company_first_contact(
+        self,
+        company_id: str,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Get the first contact of a company via GET /companies/{company_id}/contacts.
+
+        Args:
+            company_id: The company ID
+
+        Returns: (success, contact_id, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/companies/{company_id}/contacts",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    contacts = data.get("data", [])
+                    if contacts and len(contacts) > 0:
+                        contact_id = contacts[0].get("id")
+                        logger.info(f"Found contact {contact_id} for company {company_id}")
+                        return True, contact_id, None
+                    else:
+                        logger.warning(f"No contacts found for company {company_id}")
+                        return True, None, "No contacts found"
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get company contacts: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get company contacts: {e}")
+                return False, None, str(e)
+
+    async def update_resource_provider(
+        self,
+        resource_id: str,
+        company_id: str,
+        contact_id: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Update resource provider company and contact via PUT /resources/{resource_id}/administrative.
+
+        Args:
+            resource_id: The resource ID
+            company_id: The provider company ID
+            contact_id: The provider contact ID
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "resource",
+                "id": str(resource_id),
+                "relationships": {
+                    "providerCompany": {
+                        "data": {"type": "company", "id": str(company_id)}
+                    },
+                    "providerContact": {
+                        "data": {"type": "contact", "id": str(contact_id)}
+                    },
+                },
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/resources/{resource_id}/administrative",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    logger.info(f"Updated resource {resource_id} provider to company {company_id}, contact {contact_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update resource provider: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update resource provider: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

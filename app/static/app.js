@@ -35,6 +35,17 @@ const ENTITY_CONFIG = {
             'Les contrats sont tries par start_date pour gerer les renouvellements',
             'Si plusieurs contrats pour une meme ressource sans parent_contract_id, ils sont chaines automatiquement'
         ]
+    },
+    resources: {
+        requiredFields: ['resource_id'],
+        label: 'Resources',
+        notes: [
+            'Met a jour le type et/ou la societe fournisseur des ressources',
+            'resource_type_id: si vide, le type n\'est pas modifie',
+            'resource_company_id: si vide, la societe n\'est pas modifiee',
+            'Le contact de la societe est recupere automatiquement (premier contact)',
+            'Si aucun contact trouve, la societe ne sera pas associee (warning)'
+        ]
     }
 };
 
