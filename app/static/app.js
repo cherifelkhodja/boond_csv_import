@@ -27,15 +27,6 @@ const ENTITY_CONFIG = {
         label: 'Purchases',
         notes: []
     },
-    contracts: {
-        requiredFields: ['resource_id ou candidate_id'],
-        label: 'Contracts',
-        notes: [
-            'resource_id OU candidate_id obligatoire (pas les deux)',
-            'Les contrats sont tries par start_date pour gerer les renouvellements',
-            'Si plusieurs contrats pour une meme ressource sans parent_contract_id, ils sont chaines automatiquement'
-        ]
-    },
     resources: {
         requiredFields: ['resource_id'],
         label: 'Resources',
@@ -259,6 +250,15 @@ function setupEntityEventListeners(entity, container) {
     exportResultsBtn.addEventListener('click', () => {
         exportResults(entity, container);
     });
+
+    // Delete contracts button (only for resource-contracts)
+    const deleteContractsBtn = container.querySelector('.delete-contracts-btn');
+    if (entity === 'resource-contracts') {
+        deleteContractsBtn.classList.remove('hidden');
+        deleteContractsBtn.addEventListener('click', () => {
+            deleteContracts(entity, container);
+        });
+    }
 }
 
 /**
@@ -568,21 +568,7 @@ async function importData(entity, container) {
         entityData[entity].importResults = result;
 
         // Display results
-        resultsSection.classList.remove('hidden');
-        successCount.textContent = `Succes: ${result.success}`;
-        failedCount.textContent = `Echecs: ${result.failed}`;
-
-        resultsTbody.innerHTML = '';
-        result.results.forEach(r => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${r.row}</td>
-                <td class="status-${r.status}">${r.status === 'success' ? 'Succes' : 'Erreur'}</td>
-                <td>${r.id || '-'}</td>
-                <td>${r.message || '-'}</td>
-            `;
-            resultsTbody.appendChild(tr);
-        });
+        displayResults(entity, container, result);
 
         if (result.failed === 0) {
             showNotification(`Import termine avec succes ! ${result.success} elements crees.`, 'success');
@@ -719,6 +705,110 @@ function showNotification(message, type) {
         notification.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
+}
+
+/**
+ * Display results in the results section
+ */
+function displayResults(entity, container, result) {
+    const resultsSection = container.querySelector('.results-section');
+    const resultsTbody = container.querySelector('.results-table tbody');
+    const successCount = container.querySelector('.success-count');
+    const failedCount = container.querySelector('.failed-count');
+
+    resultsSection.classList.remove('hidden');
+    successCount.textContent = `Succes: ${result.success}`;
+    failedCount.textContent = `Echecs: ${result.failed}`;
+
+    resultsTbody.innerHTML = '';
+    result.results.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${r.row}</td>
+            <td class="status-${r.status}">${r.status === 'success' ? 'Succes' : 'Erreur'}</td>
+            <td>${r.id || '-'}</td>
+            <td>${escapeHtml(r.message || '-')}</td>
+        `;
+        resultsTbody.appendChild(tr);
+    });
+}
+
+/**
+ * Delete contracts for resources in CSV
+ */
+async function deleteContracts(entity, container) {
+    const file = entityData[entity].file;
+    if (!file) {
+        // Try to create from data
+        const csvContent = createCSVFromData(entity);
+        if (!csvContent || entityData[entity].rows.length === 0) {
+            showNotification('Veuillez d\'abord charger un fichier CSV', 'error');
+            return;
+        }
+    }
+
+    const deleteBtn = container.querySelector('.delete-contracts-btn');
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<span class="spinner"></span>Analyse...';
+
+    try {
+        // First, preview what will be deleted
+        const csvContent = createCSVFromData(entity);
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const formData = new FormData();
+        formData.append('file', blob, 'data.csv');
+
+        const previewResponse = await fetch(`/api/${entity}/preview-delete`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const preview = await previewResponse.json();
+
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = 'Supprimer les contrats';
+
+        // Show confirmation dialog
+        const confirmMessage = `Êtes-vous sûr de vouloir supprimer ${preview.total_contracts} contrat(s) pour ${preview.total_resources} ressource(s) ?\n\nCette action est irréversible.`;
+
+        if (!confirm(confirmMessage)) {
+            showNotification('Suppression annulée', 'warning');
+            return;
+        }
+
+        // Proceed with deletion
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<span class="spinner"></span>Suppression...';
+
+        const deleteFormData = new FormData();
+        deleteFormData.append('file', blob, 'data.csv');
+
+        const deleteResponse = await fetch(`/api/${entity}/delete-contracts`, {
+            method: 'POST',
+            body: deleteFormData
+        });
+
+        const result = await deleteResponse.json();
+
+        // Store results
+        entityData[entity].importResults = result;
+
+        // Show results
+        displayResults(entity, container, result);
+
+        if (result.failed === 0) {
+            showNotification(`${result.success} ressource(s) traitée(s) avec succès`, 'success');
+        } else {
+            showNotification(`${result.success} succès, ${result.failed} erreur(s)`, 'warning');
+        }
+
+    } catch (error) {
+        console.error('Error deleting contracts:', error);
+        showNotification('Erreur lors de la suppression', 'error');
+    } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = 'Supprimer les contrats';
+    }
 }
 
 // Add animation styles

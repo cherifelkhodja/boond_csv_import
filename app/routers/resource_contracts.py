@@ -238,3 +238,143 @@ async def import_csv(file: UploadFile = File(...)) -> ImportResponse:
         failed=failed_count,
         results=results,
     )
+
+
+@router.post("/preview-delete")
+async def preview_delete(file: UploadFile = File(...)) -> dict:
+    """
+    Preview deletion: count contracts that would be deleted for resources in CSV.
+    Used for confirmation dialog before actual deletion.
+    """
+    content = await file.read()
+    try:
+        text_content = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1")
+
+    _, rows = parse_csv(text_content)
+
+    # Get unique resource_ids
+    resource_ids = list(set(
+        row.get("resource_id", "").strip()
+        for row in rows
+        if row.get("resource_id", "").strip()
+    ))
+
+    client = get_boond_client()
+    total_contracts = 0
+    resource_contract_counts: dict[str, int] = {}
+
+    for resource_id in resource_ids:
+        success, contract_ids, _ = await client.get_resource_contracts(resource_id)
+        if success:
+            resource_contract_counts[resource_id] = len(contract_ids)
+            total_contracts += len(contract_ids)
+
+    return {
+        "total_resources": len(resource_ids),
+        "total_contracts": total_contracts,
+        "details": resource_contract_counts,
+    }
+
+
+@router.post("/delete-contracts")
+async def delete_contracts(file: UploadFile = File(...)) -> ImportResponse:
+    """
+    Delete all contracts for resources listed in CSV.
+
+    Workflow:
+    1. Extract unique resource_ids from CSV
+    2. For each resource, get their contracts via GET /resources/{id}/administrative
+    3. Delete each contract via DELETE /contracts/{id}
+    """
+    content = await file.read()
+    try:
+        text_content = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text_content = content.decode("latin-1")
+
+    _, rows = parse_csv(text_content)
+
+    # Get unique resource_ids
+    resource_ids = list(set(
+        row.get("resource_id", "").strip()
+        for row in rows
+        if row.get("resource_id", "").strip()
+    ))
+
+    client = get_boond_client()
+    results: list[ImportResult] = []
+    success_count = 0
+    failed_count = 0
+    row_num = 0
+
+    for resource_id in resource_ids:
+        row_num += 1
+
+        # Get contracts for this resource
+        get_success, contract_ids, get_error = await client.get_resource_contracts(resource_id)
+
+        if not get_success:
+            failed_count += 1
+            results.append(
+                ImportResult(
+                    row=row_num,
+                    status="error",
+                    id=resource_id,
+                    message=f"Erreur récupération contrats: {get_error}",
+                )
+            )
+            continue
+
+        if not contract_ids:
+            results.append(
+                ImportResult(
+                    row=row_num,
+                    status="success",
+                    id=resource_id,
+                    message="Aucun contrat à supprimer",
+                )
+            )
+            success_count += 1
+            continue
+
+        # Delete each contract
+        deleted = 0
+        errors = []
+        for contract_id in contract_ids:
+            del_success, del_error = await client.delete_contract(contract_id)
+            if del_success:
+                deleted += 1
+            else:
+                errors.append(f"CTR{contract_id}: {del_error}")
+
+        if errors:
+            failed_count += 1
+            results.append(
+                ImportResult(
+                    row=row_num,
+                    status="error",
+                    id=resource_id,
+                    message=f"Supprimés: {deleted}/{len(contract_ids)} | Erreurs: {'; '.join(errors)}",
+                )
+            )
+        else:
+            success_count += 1
+            results.append(
+                ImportResult(
+                    row=row_num,
+                    status="success",
+                    id=resource_id,
+                    message=f"Supprimés: {deleted} contrat(s)",
+                )
+            )
+
+        logger.info(f"Resource {resource_id}: deleted {deleted}/{len(contract_ids)} contracts")
+
+    return ImportResponse(
+        total=len(resource_ids),
+        success=success_count,
+        failed=failed_count,
+        results=results,
+    )

@@ -1006,6 +1006,76 @@ class BoondClient:
                 logger.error(f"Failed to create contract: {e}")
                 return False, None, str(e)
 
+    async def get_resource_contracts(
+        self,
+        resource_id: str,
+    ) -> tuple[bool, list[str], str | None]:
+        """
+        Get all contract IDs for a resource via GET /resources/{resource_id}/administrative.
+
+        Args:
+            resource_id: The resource ID
+
+        Returns: (success, list of contract IDs, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/resources/{resource_id}/administrative",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    # Extract contract IDs from relationships
+                    contracts_data = data.get("data", {}).get("relationships", {}).get("contracts", {}).get("data", [])
+                    contract_ids = [c.get("id") for c in contracts_data if c.get("id")]
+                    logger.info(f"Found {len(contract_ids)} contracts for resource {resource_id}")
+                    return True, contract_ids, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get resource contracts: {error_msg}")
+                    return False, [], error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get resource contracts: {e}")
+                return False, [], str(e)
+
+    async def delete_contract(
+        self,
+        contract_id: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Delete a contract via DELETE /contracts/{contract_id}.
+
+        Args:
+            contract_id: The contract ID to delete
+
+        Returns: (success, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.delete(
+                    f"{self.base_url}/contracts/{contract_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 204):
+                    logger.info(f"Deleted contract {contract_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to delete contract {contract_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to delete contract {contract_id}: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

@@ -187,6 +187,15 @@ main {
     color: var(--error-color);
 }
 
+.btn-danger {
+    background-color: var(--error-color);
+    color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: #dc2626;
+}
+
 /* Template section */
 .template-info {
     display: flex;
