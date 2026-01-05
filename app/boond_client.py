@@ -583,6 +583,9 @@ class BoondClient:
         # Get order fields from row_data
         order_number = row_data.get("order_number", "")
         order_comments = row_data.get("order_informationComments", "")
+        # Convert literal \n to actual newlines
+        if order_comments:
+            order_comments = order_comments.replace("\\n", "\n")
         billing_detail_id = row_data.get("order_billingDetail")
         bank_detail_id = row_data.get("order_bankDetail")
         start_date = row_data.get("start_date", "")
