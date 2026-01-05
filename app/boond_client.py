@@ -954,9 +954,9 @@ class BoondClient:
 
         # Add salary/cost based on typeOf
         if type_of == 0 and monthly_salary is not None:
-            attributes["monthlyRemuneration"] = monthly_salary
+            attributes["monthlySalary"] = monthly_salary
         elif daily_cost is not None:
-            attributes["dailyProductionCost"] = daily_cost
+            attributes["contractAverageDailyProductionCost"] = daily_cost
 
         # Build relationships
         relationships: dict[str, Any] = {
