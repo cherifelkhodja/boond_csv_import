@@ -663,7 +663,7 @@ class BoondClient:
         Find a document in ./documents/ folder matching order_number or 'Contrat'.
 
         Search criteria (case insensitive):
-        - File name contains order_number
+        - File name contains order_number (if not empty or "PO")
         - OR file name contains 'Contrat'
 
         If multiple files match, returns the most recently modified one.
@@ -674,6 +674,9 @@ class BoondClient:
             logger.warning(f"Documents folder not found: {DOCUMENTS_FOLDER}")
             return None
 
+        # Treat "PO" as empty order_number
+        effective_order_number = order_number if order_number and order_number.upper() != "PO" else ""
+
         matching_files: list[tuple[Path, float]] = []
 
         for file_path in DOCUMENTS_FOLDER.iterdir():
@@ -683,7 +686,7 @@ class BoondClient:
             file_name_lower = file_path.name.lower()
 
             # Check if file matches order_number or contains "contrat"
-            if order_number and order_number.lower() in file_name_lower:
+            if effective_order_number and effective_order_number.lower() in file_name_lower:
                 mtime = file_path.stat().st_mtime
                 matching_files.append((file_path, mtime))
                 logger.debug(f"Found matching file (order_number): {file_path.name}")
