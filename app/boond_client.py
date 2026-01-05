@@ -2,7 +2,6 @@
 
 import logging
 import os
-import re
 from pathlib import Path
 from typing import Any
 
@@ -15,9 +14,6 @@ logger = logging.getLogger(__name__)
 
 # Documents folder path (relative to project root)
 DOCUMENTS_FOLDER = Path(__file__).parent.parent / "documents"
-
-# Regex to extract first CTR reference from filename
-CTR_PATTERN = re.compile(r"(CTR\d+)", re.IGNORECASE)
 
 
 class BoondClient:
@@ -416,17 +412,17 @@ class BoondClient:
                             if order_success:
                                 logger.info(f"Auto-created order {order_id} for delivery {entity_id}")
 
-                                # Try to upload document to the order
+                                # Try to upload documents to the order
                                 contrat = row_data.get("contrat", "")
-                                doc_path = self._find_document_for_order(order_number, contrat)
-                                if doc_path:
+                                doc_paths = self._find_documents_for_order(order_number, contrat)
+                                for doc_path in doc_paths:
                                     doc_success, doc_error = await self._upload_document_to_order(
                                         order_id, doc_path
                                     )
                                     if doc_success:
-                                        logger.info(f"Uploaded document to order {order_id}")
+                                        logger.info(f"Uploaded document {doc_path.name} to order {order_id}")
                                     else:
-                                        logger.warning(f"Failed to upload document: {doc_error}")
+                                        logger.warning(f"Failed to upload document {doc_path.name}: {doc_error}")
                             else:
                                 logger.warning(f"Failed to auto-create order: {order_error}")
 
@@ -660,68 +656,70 @@ class BoondClient:
             except Exception as e:
                 return False, None, str(e)
 
-    def _find_document_for_order(
+    def _find_documents_for_order(
         self,
         order_number: str,
         contrat: str = "",
-    ) -> Path | None:
+    ) -> list[Path]:
         """
-        Find a document in ./documents/ folder matching order_number or contrat.
+        Find documents in ./documents/ folder matching order_number and/or contrat.
 
         Search criteria (case insensitive):
-        - If order_number is provided (and not "PO"): use order_number for matching
-        - Else if contrat is provided: use contrat for matching
-        - Match is done on first CTR reference in filename (exact match)
+        - If order_number is provided (and not "PO"): search for order_number in filename
+        - If contrat is provided: search for contrat in filename
+        - If both are provided, search for BOTH and return all matching documents
 
-        For filenames with multiple CTR references like:
-        "CTR147730_-_Avenant_au_Contrat_N__CTR137233..."
-        Only the first reference (CTR147730) is considered for matching.
+        For each reference, if multiple files match, the most recently modified one is selected.
 
-        If multiple files match, returns the most recently modified one.
-
-        Returns: Path to the file or None if not found.
+        Returns: List of paths to matching files (one per reference that matched).
         """
         if not DOCUMENTS_FOLDER.exists():
             logger.warning(f"Documents folder not found: {DOCUMENTS_FOLDER}")
-            return None
+            return []
 
-        # Determine which reference to search for
-        # Priority: order_number (if not "PO") > contrat
+        # Build list of references to search for
+        search_refs: list[str] = []
         if order_number and order_number.upper() != "PO":
-            search_ref = order_number.upper()
-        elif contrat:
-            search_ref = contrat.upper()
-        else:
+            search_refs.append(order_number)
+        if contrat:
+            search_refs.append(contrat)
+
+        if not search_refs:
             logger.info("No order_number or contrat provided for document search")
-            return None
+            return []
 
-        matching_files: list[tuple[Path, float]] = []
+        result_files: list[Path] = []
+        seen_files: set[Path] = set()
 
-        for file_path in DOCUMENTS_FOLDER.iterdir():
-            if not file_path.is_file():
-                continue
+        for search_ref in search_refs:
+            matching_files: list[tuple[Path, float]] = []
 
-            file_name = file_path.name
+            for file_path in DOCUMENTS_FOLDER.iterdir():
+                if not file_path.is_file():
+                    continue
 
-            # Extract first CTR reference from filename
-            ctr_match = CTR_PATTERN.search(file_name)
-            first_ctr = ctr_match.group(1).upper() if ctr_match else None
+                file_name = file_path.name
 
-            # Check if first CTR reference matches search_ref
-            if first_ctr and search_ref == first_ctr:
-                mtime = file_path.stat().st_mtime
-                matching_files.append((file_path, mtime))
-                logger.debug(f"Found matching file (first CTR={first_ctr}): {file_name}")
+                # Check if filename contains the search reference (case insensitive)
+                if search_ref.lower() in file_name.lower():
+                    mtime = file_path.stat().st_mtime
+                    matching_files.append((file_path, mtime))
+                    logger.debug(f"Found matching file ({search_ref}): {file_name}")
 
-        if not matching_files:
-            logger.info(f"No document found for reference={search_ref}")
-            return None
+            if matching_files:
+                # Sort by modification time (most recent first) and select the first
+                matching_files.sort(key=lambda x: x[1], reverse=True)
+                selected_file = matching_files[0][0]
 
-        # Sort by modification time (most recent first) and return the first
-        matching_files.sort(key=lambda x: x[1], reverse=True)
-        selected_file = matching_files[0][0]
-        logger.info(f"Selected document for upload: {selected_file.name}")
-        return selected_file
+                # Avoid duplicates if same file matches both references
+                if selected_file not in seen_files:
+                    seen_files.add(selected_file)
+                    result_files.append(selected_file)
+                    logger.info(f"Selected document for '{search_ref}': {selected_file.name}")
+            else:
+                logger.info(f"No document found for reference={search_ref}")
+
+        return result_files
 
     async def _upload_document_to_order(
         self,
