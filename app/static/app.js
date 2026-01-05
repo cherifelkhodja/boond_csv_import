@@ -46,6 +46,17 @@ const ENTITY_CONFIG = {
             'Le contact de la societe est recupere automatiquement (premier contact)',
             'Si aucun contact trouve, la societe ne sera pas associee (warning)'
         ]
+    },
+    'resource-contracts': {
+        requiredFields: ['resource_id', 'contract_typeOf', 'contract_start_date', 'contract_end_date'],
+        label: 'Resource Contracts',
+        notes: [
+            'Cree des contrats pour les ressources',
+            'typeOf=0: utilise contract_monthly_salary',
+            'typeOf!=0: utilise contract_daily_production_cost',
+            'contract_renewal=VRAI: lie au contrat precedent (meme resource_id, par start_date)',
+            'Si renouvellement sans contrat precedent: warning mais creation sans parent'
+        ]
     }
 };
 

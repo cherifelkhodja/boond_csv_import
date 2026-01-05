@@ -920,6 +920,90 @@ class BoondClient:
                 logger.error(f"Failed to update resource provider: {e}")
                 return False, str(e)
 
+    async def create_resource_contract(
+        self,
+        resource_id: str,
+        type_of: int,
+        start_date: str,
+        end_date: str,
+        monthly_salary: float | None = None,
+        daily_cost: float | None = None,
+        parent_contract_id: str | None = None,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create a contract for a resource via POST /contracts.
+
+        Args:
+            resource_id: The resource ID (dependsOn)
+            type_of: Contract type (0=salarié uses monthly_salary, other uses daily_cost)
+            start_date: Contract start date (YYYY-MM-DD)
+            end_date: Contract end date (YYYY-MM-DD)
+            monthly_salary: Monthly salary (used if typeOf=0)
+            daily_cost: Daily production cost (used if typeOf!=0)
+            parent_contract_id: Parent contract ID for renewals
+
+        Returns: (success, contract_id, error_message)
+        """
+        # Build attributes
+        attributes: dict[str, Any] = {
+            "typeOf": type_of,
+            "startDate": start_date,
+            "endDate": end_date,
+        }
+
+        # Add salary/cost based on typeOf
+        if type_of == 0 and monthly_salary is not None:
+            attributes["monthlyRemuneration"] = monthly_salary
+        elif daily_cost is not None:
+            attributes["dailyProductionCost"] = daily_cost
+
+        # Build relationships
+        relationships: dict[str, Any] = {
+            "dependsOn": {
+                "data": {"type": "resource", "id": str(resource_id)}
+            }
+        }
+
+        # Add parent contract for renewals
+        if parent_contract_id:
+            relationships["parentContract"] = {
+                "data": {"type": "contract", "id": str(parent_contract_id)}
+            }
+
+        payload = {
+            "data": {
+                "type": "contract",
+                "attributes": attributes,
+                "relationships": relationships,
+            }
+        }
+
+        logger.info(f"Creating contract for resource {resource_id} with payload: {payload}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/contracts",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    contract_id = data.get("data", {}).get("id")
+                    logger.info(f"Created contract {contract_id} for resource {resource_id}")
+                    return True, contract_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to create contract: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to create contract: {e}")
+                return False, None, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],
