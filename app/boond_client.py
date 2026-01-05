@@ -417,7 +417,8 @@ class BoondClient:
                                 logger.info(f"Auto-created order {order_id} for delivery {entity_id}")
 
                                 # Try to upload document to the order
-                                doc_path = self._find_document_for_order(order_number)
+                                contrat = row_data.get("contrat", "")
+                                doc_path = self._find_document_for_order(order_number, contrat)
                                 if doc_path:
                                     doc_success, doc_error = await self._upload_document_to_order(
                                         order_id, doc_path
@@ -662,13 +663,15 @@ class BoondClient:
     def _find_document_for_order(
         self,
         order_number: str,
+        contrat: str = "",
     ) -> Path | None:
         """
-        Find a document in ./documents/ folder matching order_number or 'Contrat'.
+        Find a document in ./documents/ folder matching order_number or contrat.
 
         Search criteria (case insensitive):
-        - If order_number is provided (and not "PO"): match first CTR reference in filename
-        - If order_number is empty or "PO": match files containing 'Contrat'
+        - If order_number is provided (and not "PO"): use order_number for matching
+        - Else if contrat is provided: use contrat for matching
+        - Match is done on first CTR reference in filename (exact match)
 
         For filenames with multiple CTR references like:
         "CTR147730_-_Avenant_au_Contrat_N__CTR137233..."
@@ -682,8 +685,15 @@ class BoondClient:
             logger.warning(f"Documents folder not found: {DOCUMENTS_FOLDER}")
             return None
 
-        # Treat "PO" as empty order_number
-        effective_order_number = order_number if order_number and order_number.upper() != "PO" else ""
+        # Determine which reference to search for
+        # Priority: order_number (if not "PO") > contrat
+        if order_number and order_number.upper() != "PO":
+            search_ref = order_number.upper()
+        elif contrat:
+            search_ref = contrat.upper()
+        else:
+            logger.info("No order_number or contrat provided for document search")
+            return None
 
         matching_files: list[tuple[Path, float]] = []
 
@@ -692,26 +702,19 @@ class BoondClient:
                 continue
 
             file_name = file_path.name
-            file_name_lower = file_name.lower()
 
-            if effective_order_number:
-                # Search by first CTR reference only
-                ctr_match = CTR_PATTERN.search(file_name)
-                first_ctr = ctr_match.group(1).upper() if ctr_match else None
+            # Extract first CTR reference from filename
+            ctr_match = CTR_PATTERN.search(file_name)
+            first_ctr = ctr_match.group(1).upper() if ctr_match else None
 
-                if first_ctr and effective_order_number.upper() == first_ctr:
-                    mtime = file_path.stat().st_mtime
-                    matching_files.append((file_path, mtime))
-                    logger.debug(f"Found matching file (first CTR={first_ctr}): {file_name}")
-            else:
-                # No order_number - search by "contrat" keyword
-                if "contrat" in file_name_lower:
-                    mtime = file_path.stat().st_mtime
-                    matching_files.append((file_path, mtime))
-                    logger.debug(f"Found matching file (contrat): {file_name}")
+            # Check if first CTR reference matches search_ref
+            if first_ctr and search_ref == first_ctr:
+                mtime = file_path.stat().st_mtime
+                matching_files.append((file_path, mtime))
+                logger.debug(f"Found matching file (first CTR={first_ctr}): {file_name}")
 
         if not matching_files:
-            logger.info(f"No document found for order_number={order_number}")
+            logger.info(f"No document found for reference={search_ref}")
             return None
 
         # Sort by modification time (most recent first) and return the first

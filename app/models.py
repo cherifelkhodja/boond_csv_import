@@ -58,6 +58,8 @@ DELIVERY_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
     "order_informationComments": ("_order_comments", False, False, None),
     "order_billingDetail": ("_order_billingDetail", False, False, None),
     "order_bankDetail": ("_order_bankDetail", False, False, None),
+    # Document search field - used to find document to upload
+    "contrat": ("_contrat", False, False, None),
 }
 
 ORDER_FIELDS: dict[str, tuple[str, bool, bool, str | None]] = {
@@ -187,6 +189,7 @@ ENTITY_CONFIGS = {
             "project_id", "resource_id", "title", "start_date", "end_date",
             "average_daily_price_excluding_tax", "number_of_days_invoiced", "number_of_days_free",
             "order_number", "order_informationComments", "order_billingDetail", "order_bankDetail",
+            "contrat",
         ],
     },
     "orders": {
