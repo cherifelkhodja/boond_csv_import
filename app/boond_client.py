@@ -1076,6 +1076,123 @@ class BoondClient:
                 logger.error(f"Failed to delete contract {contract_id}: {e}")
                 return False, str(e)
 
+    async def get_contract(
+        self,
+        contract_id: str,
+    ) -> tuple[bool, dict[str, Any] | None, str | None]:
+        """
+        Get contract details via GET /contracts/{contract_id}.
+
+        Args:
+            contract_id: The contract ID
+
+        Returns: (success, contract_data, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/contracts/{contract_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    contract_data = data.get("data", {})
+                    return True, contract_data, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get contract {contract_id}: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get contract {contract_id}: {e}")
+                return False, None, str(e)
+
+    async def get_resource_contracts_with_details(
+        self,
+        resource_id: str,
+    ) -> tuple[bool, list[dict[str, Any]], str | None]:
+        """
+        Get all contracts with details for a resource.
+
+        Args:
+            resource_id: The resource ID
+
+        Returns: (success, list of contract details with id/startDate/endDate, error_message)
+        """
+        # First get contract IDs
+        success, contract_ids, error = await self.get_resource_contracts(resource_id)
+        if not success:
+            return False, [], error
+
+        if not contract_ids:
+            return True, [], None
+
+        # Fetch details for each contract
+        contracts = []
+        for contract_id in contract_ids:
+            success, contract_data, error = await self.get_contract(contract_id)
+            if success and contract_data:
+                attributes = contract_data.get("attributes", {})
+                contracts.append({
+                    "id": contract_data.get("id"),
+                    "startDate": attributes.get("startDate"),
+                    "endDate": attributes.get("endDate"),
+                })
+
+        return True, contracts, None
+
+    async def update_contract(
+        self,
+        contract_id: str,
+        end_date: str,
+        end_reason: int = 4,
+    ) -> tuple[bool, str | None]:
+        """
+        Update a contract via PUT /contracts/{contract_id}.
+
+        Args:
+            contract_id: The contract ID to update
+            end_date: The new end date (YYYY-MM-DD)
+            end_reason: The end reason code (default 4)
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "contract",
+                "id": str(contract_id),
+                "attributes": {
+                    "endDate": end_date,
+                    "endReason": end_reason,
+                }
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/contracts/{contract_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                    json=payload,
+                )
+
+                if response.status_code in (200, 204):
+                    logger.info(f"Updated contract {contract_id} with endDate={end_date}, endReason={end_reason}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update contract {contract_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update contract {contract_id}: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],
