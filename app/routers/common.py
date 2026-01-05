@@ -59,7 +59,7 @@ def create_entity_router(entity_type: str) -> APIRouter:
         except UnicodeDecodeError:
             text_content = content.decode("latin-1")
 
-        _, rows = parse_csv(text_content)
+        _, rows = parse_csv(text_content, entity_type)
         return validate_csv_data(entity_type, rows)
 
     @router.post("/import")
@@ -71,7 +71,7 @@ def create_entity_router(entity_type: str) -> APIRouter:
         except UnicodeDecodeError:
             text_content = content.decode("latin-1")
 
-        _, rows = parse_csv(text_content)
+        _, rows = parse_csv(text_content, entity_type)
 
         # Validate first
         validation = validate_csv_data(entity_type, rows)
