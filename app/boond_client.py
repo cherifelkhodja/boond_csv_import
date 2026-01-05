@@ -948,6 +948,7 @@ class BoondClient:
         attributes: dict[str, Any] = {
             "typeOf": type_of,
             "startDate": start_date,
+            "workingTimeType": 0,
         }
         if end_date:
             attributes["endDate"] = end_date
