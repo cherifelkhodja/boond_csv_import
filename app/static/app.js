@@ -122,6 +122,13 @@ function initializeTestConnection() {
 function initializeEntityTab(entity) {
     const template = document.getElementById('entity-template');
     const tabContent = document.getElementById(`tab-${entity}`);
+
+    // Skip if tab doesn't exist in HTML
+    if (!tabContent) {
+        console.log(`Tab for ${entity} not found in HTML, skipping`);
+        return;
+    }
+
     const clone = template.content.cloneNode(true);
 
     // Set entity data attribute
