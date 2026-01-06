@@ -1333,10 +1333,11 @@ const importTimeReports = {
             // Enable start button if we have required columns and rows
             const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
             const hasTerm = this.headers.some(h => h.toLowerCase() === 'term');
-            document.getElementById('import-tr-start-btn').disabled = !hasResourceId || !hasTerm || this.rows.length === 0;
+            const hasStartDate = this.headers.some(h => h.toLowerCase() === 'startdate');
+            document.getElementById('import-tr-start-btn').disabled = !hasResourceId || !hasTerm || !hasStartDate || this.rows.length === 0;
 
-            if (!hasResourceId || !hasTerm) {
-                showNotification('Le fichier doit contenir les colonnes resource_id et term', 'error');
+            if (!hasResourceId || !hasTerm || !hasStartDate) {
+                showNotification('Le fichier doit contenir les colonnes resource_id, term et startDate', 'error');
             }
         };
         reader.readAsText(this.file);
@@ -1388,7 +1389,7 @@ const importTimeReports = {
 
         // Render headers (with action column)
         thead.innerHTML = '<tr>' + this.headers.map(h => {
-            const isRequired = h.toLowerCase() === 'resource_id' || h.toLowerCase() === 'term';
+            const isRequired = h.toLowerCase() === 'resource_id' || h.toLowerCase() === 'term' || h.toLowerCase() === 'startdate';
             return `<th class="${isRequired ? 'required' : ''}">${escapeHtml(h)}</th>`;
         }).join('') + '<th class="action-col">Actions</th></tr>';
 
