@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.boond_client import get_boond_client
 from app.models import ConnectionTestResponse
-from app.routers import contracts, deliveries, orders, projects, purchases, resources, resource_contracts
+from app.routers import contracts, deliveries, orders, projects, purchases, resources, resource_contracts, export_time_reports
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +47,7 @@ app.include_router(purchases.router, prefix="/api")
 app.include_router(contracts.router, prefix="/api")
 app.include_router(resources.router, prefix="/api")
 app.include_router(resource_contracts.router, prefix="/api")
+app.include_router(export_time_reports.router, prefix="/api")
 
 
 @app.get("/")

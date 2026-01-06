@@ -21,6 +21,7 @@
             <li><a href="#" class="tab-link" data-entity="deliveries">Deliveries</a></li>
             <li><a href="#" class="tab-link" data-entity="resources">Resources</a></li>
             <li><a href="#" class="tab-link" data-entity="resource-contracts">Resource Contracts</a></li>
+            <li><a href="#" class="tab-link" data-entity="export-time-reports">Export Time Reports</a></li>
         </ul>
     </nav>
 
@@ -33,6 +34,87 @@
         <div class="tab-content" id="tab-resources">
         </div>
         <div class="tab-content" id="tab-resource-contracts">
+        </div>
+        <div class="tab-content" id="tab-export-time-reports">
+            <div class="entity-container" data-entity="export-time-reports">
+                <!-- Upload Section -->
+                <section class="section upload-section">
+                    <h2>1. Fichier CSV des resources</h2>
+                    <p class="section-note">Le fichier doit contenir une colonne <code>resource_id</code></p>
+                    <div class="dropzone" id="export-tr-dropzone" tabindex="0">
+                        <div class="dropzone-content">
+                            <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p>Glissez-deposez votre fichier CSV ici</p>
+                            <p class="dropzone-or">ou</p>
+                            <button class="btn btn-secondary" id="export-tr-browse-btn">Parcourir</button>
+                        </div>
+                        <input type="file" id="export-tr-file-input" accept=".csv" hidden>
+                    </div>
+                    <div class="selected-file hidden" id="export-tr-selected-file">
+                        <span class="file-name" id="export-tr-file-name"></span>
+                        <button class="btn btn-text" id="export-tr-clear-btn">X</button>
+                    </div>
+                </section>
+
+                <!-- Period Section -->
+                <section class="section period-section">
+                    <h2>2. Periode a exporter</h2>
+                    <div class="period-inputs">
+                        <div class="period-field">
+                            <label for="export-tr-start-term">De:</label>
+                            <input type="month" id="export-tr-start-term" value="2024-01">
+                        </div>
+                        <div class="period-field">
+                            <label for="export-tr-end-term">A:</label>
+                            <input type="month" id="export-tr-end-term" value="2024-12">
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Instance Section -->
+                <section class="section instance-section">
+                    <h2>3. Instance source</h2>
+                    <div class="instance-options">
+                        <label class="radio-label">
+                            <input type="radio" name="export-tr-instance" value="craftmania" checked>
+                            <span>Craftmania</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="export-tr-instance" value="gemini">
+                            <span>Gemini</span>
+                        </label>
+                    </div>
+                </section>
+
+                <!-- Actions Section -->
+                <section class="section actions-section">
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="export-tr-start-btn" disabled>Lancer l'export</button>
+                    </div>
+                    <div class="progress-container hidden" id="export-tr-progress">
+                        <div class="progress-header">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="export-tr-progress-fill"></div>
+                            </div>
+                            <span class="progress-text" id="export-tr-progress-text">0%</span>
+                        </div>
+                        <div class="progress-action" id="export-tr-progress-action"></div>
+                        <div class="action-log" id="export-tr-action-log"></div>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="section results-section hidden" id="export-tr-results">
+                    <h2>Resultats</h2>
+                    <div class="results-summary">
+                        <span class="success-count" id="export-tr-success-count"></span>
+                        <span id="export-tr-entries-count"></span>
+                    </div>
+                    <button class="btn btn-primary" id="export-tr-download-btn">Telecharger le CSV</button>
+                </section>
+            </div>
         </div>
     </main>
 

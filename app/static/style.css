@@ -536,3 +536,76 @@ td input.error {
         transform: rotate(360deg);
     }
 }
+
+/* Export Time Reports specific styles */
+.section-note {
+    color: var(--text-light);
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.section-note code {
+    background-color: var(--bg-color);
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+.period-inputs {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.period-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.period-field label {
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.period-field input[type="month"] {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    color: var(--text-color);
+}
+
+.period-field input[type="month"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.instance-options {
+    display: flex;
+    gap: 2rem;
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.radio-label input[type="radio"] {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--primary-color);
+}
+
+.radio-label span {
+    font-weight: 500;
+}
+
+#export-tr-entries-count {
+    color: var(--primary-color);
+    font-weight: 600;
+}

@@ -1312,6 +1312,74 @@ class BoondClient:
                 logger.error(f"Failed to update positioning {positioning_id}: {e}")
                 return False, str(e)
 
+    async def get_resource_times_reports(
+        self,
+        resource_id: str,
+    ) -> tuple[bool, list[dict[str, Any]], str | None]:
+        """
+        Get times-reports list for a resource via GET /resources/{resource_id}/times-reports.
+
+        Args:
+            resource_id: The resource ID
+
+        Returns: (success, list of times-reports with id/term/state, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/resources/{resource_id}/times-reports",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    times_reports = data.get("data", [])
+                    logger.info(f"Found {len(times_reports)} times-reports for resource {resource_id}")
+                    return True, times_reports, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get times-reports for resource {resource_id}: {error_msg}")
+                    return False, [], error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get times-reports for resource {resource_id}: {e}")
+                return False, [], str(e)
+
+    async def get_time_report_detail(
+        self,
+        time_report_id: str,
+    ) -> tuple[bool, dict[str, Any] | None, str | None]:
+        """
+        Get detailed time-report via GET /times-reports/{id}.
+
+        Args:
+            time_report_id: The time-report ID
+
+        Returns: (success, time_report_data with regularTimes/exceptionalTimes/relationships/included, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/times-reports/{time_report_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return True, data, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get time-report {time_report_id}: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get time-report {time_report_id}: {e}")
+                return False, None, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

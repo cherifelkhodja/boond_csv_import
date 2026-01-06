@@ -824,3 +824,230 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
+
+/**
+ * Export Time Reports functionality
+ */
+const exportTimeReports = {
+    file: null,
+    csvContent: null,
+
+    init() {
+        const dropzone = document.getElementById('export-tr-dropzone');
+        const fileInput = document.getElementById('export-tr-file-input');
+        const browseBtn = document.getElementById('export-tr-browse-btn');
+        const clearBtn = document.getElementById('export-tr-clear-btn');
+        const startBtn = document.getElementById('export-tr-start-btn');
+        const downloadBtn = document.getElementById('export-tr-download-btn');
+
+        if (!dropzone) return; // Tab not present
+
+        // Browse button
+        browseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        // Dropzone click
+        dropzone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].name.endsWith('.csv')) {
+                this.handleFileSelect(files[0]);
+            }
+        });
+
+        // File input change
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                this.handleFileSelect(fileInput.files[0]);
+            }
+        });
+
+        // Clear file
+        clearBtn.addEventListener('click', () => {
+            this.clearFile();
+        });
+
+        // Start export
+        startBtn.addEventListener('click', () => {
+            this.startExport();
+        });
+
+        // Download CSV
+        downloadBtn.addEventListener('click', () => {
+            this.downloadCSV();
+        });
+    },
+
+    handleFileSelect(file) {
+        this.file = file;
+        document.getElementById('export-tr-selected-file').classList.remove('hidden');
+        document.getElementById('export-tr-file-name').textContent = file.name;
+        document.getElementById('export-tr-start-btn').disabled = false;
+    },
+
+    clearFile() {
+        this.file = null;
+        this.csvContent = null;
+        document.getElementById('export-tr-selected-file').classList.add('hidden');
+        document.getElementById('export-tr-file-input').value = '';
+        document.getElementById('export-tr-start-btn').disabled = true;
+        document.getElementById('export-tr-progress').classList.add('hidden');
+        document.getElementById('export-tr-results').classList.add('hidden');
+        document.getElementById('export-tr-action-log').innerHTML = '';
+    },
+
+    async startExport() {
+        if (!this.file) return;
+
+        const startBtn = document.getElementById('export-tr-start-btn');
+        const progressContainer = document.getElementById('export-tr-progress');
+        const progressFill = document.getElementById('export-tr-progress-fill');
+        const progressText = document.getElementById('export-tr-progress-text');
+        const progressAction = document.getElementById('export-tr-progress-action');
+        const actionLog = document.getElementById('export-tr-action-log');
+        const resultsSection = document.getElementById('export-tr-results');
+
+        // Get period values
+        const startTerm = document.getElementById('export-tr-start-term').value;
+        const endTerm = document.getElementById('export-tr-end-term').value;
+
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<span class="spinner"></span>Export en cours...';
+        progressContainer.classList.remove('hidden');
+        resultsSection.classList.add('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        progressAction.textContent = '';
+        actionLog.innerHTML = '';
+
+        try {
+            const formData = new FormData();
+            formData.append('file', this.file);
+
+            // Build URL with query params
+            const url = `/api/export-time-reports/export?start_term=${startTerm}&end_term=${endTerm}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value);
+                const lines = text.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            this.handleSSEEvent(data);
+                        } catch (e) {
+                            console.error('Error parsing SSE:', e);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            showNotification('Erreur lors de l\'export', 'error');
+        } finally {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Lancer l\'export';
+        }
+    },
+
+    handleSSEEvent(data) {
+        const progressFill = document.getElementById('export-tr-progress-fill');
+        const progressText = document.getElementById('export-tr-progress-text');
+        const progressAction = document.getElementById('export-tr-progress-action');
+        const actionLog = document.getElementById('export-tr-action-log');
+        const resultsSection = document.getElementById('export-tr-results');
+        const successCount = document.getElementById('export-tr-success-count');
+        const entriesCount = document.getElementById('export-tr-entries-count');
+
+        switch (data.type) {
+            case 'progress':
+                progressFill.style.width = `${data.percent}%`;
+                progressText.textContent = `${data.percent}% (${data.current}/${data.total})`;
+                progressAction.textContent = data.action;
+                break;
+
+            case 'action':
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                if (data.message.startsWith('ERROR')) {
+                    logEntry.classList.add('error');
+                } else if (data.message.includes('exportees')) {
+                    logEntry.classList.add('success');
+                }
+                logEntry.textContent = data.message;
+                actionLog.appendChild(logEntry);
+                actionLog.scrollTop = actionLog.scrollHeight;
+                break;
+
+            case 'complete':
+                progressFill.style.width = '100%';
+                progressText.textContent = '100%';
+
+                // Store CSV content
+                this.csvContent = data.csv_content;
+
+                // Show results
+                resultsSection.classList.remove('hidden');
+                successCount.textContent = `Resources traitees: ${data.success}/${data.total}`;
+                entriesCount.textContent = `Entrees exportees: ${data.total_entries}`;
+
+                if (data.failed === 0) {
+                    showNotification(`Export termine ! ${data.total_entries} entrees exportees.`, 'success');
+                } else {
+                    showNotification(`Export termine avec ${data.failed} erreur(s).`, 'warning');
+                }
+                break;
+        }
+    },
+
+    downloadCSV() {
+        if (!this.csvContent) {
+            showNotification('Aucun contenu a telecharger', 'error');
+            return;
+        }
+
+        const startTerm = document.getElementById('export-tr-start-term').value;
+        const endTerm = document.getElementById('export-tr-end-term').value;
+        const filename = `time_reports_${startTerm}_${endTerm}.csv`;
+
+        const blob = new Blob([this.csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }
+};
+
+// Initialize Export Time Reports when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    exportTimeReports.init();
+});
