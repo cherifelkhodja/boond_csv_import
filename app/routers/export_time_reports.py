@@ -19,25 +19,6 @@ router = APIRouter(prefix="/export-time-reports", tags=["Export Time Reports"])
 DEFAULT_API_DELAY_MS = 100
 
 
-def _filter_by_period(times_reports: list[dict], start_term: str, end_term: str) -> list[dict]:
-    """
-    Filter times-reports by period (term attribute).
-
-    Args:
-        times_reports: List of times-reports with term attribute
-        start_term: Start term in format YYYY-MM
-        end_term: End term in format YYYY-MM
-
-    Returns: Filtered list of times-reports
-    """
-    filtered = []
-    for tr in times_reports:
-        term = tr.get("attributes", {}).get("term", "")
-        if term and start_term <= term <= end_term:
-            filtered.append(tr)
-    return filtered
-
-
 def _extract_time_entries(
     time_report_data: dict,
     resource_id: str,
@@ -208,12 +189,10 @@ def _generate_csv_content(entries: list[dict]) -> str:
 @router.post("/export")
 async def export_time_reports(
     file: UploadFile = File(...),
-    start_term: str = "2024-01",
-    end_term: str = "2024-12",
     api_delay_ms: int = DEFAULT_API_DELAY_MS,
 ) -> StreamingResponse:
     """
-    Export time reports for resources from a CSV file.
+    Export all time reports for resources from a CSV file.
     Returns Server-Sent Events for real-time progress.
 
     The CSV file should contain a `resource_id` column.
@@ -265,17 +244,14 @@ async def export_time_reports(
                 failed_count += 1
                 continue
 
-            # Filter by period
-            filtered_reports = _filter_by_period(times_reports, start_term, end_term)
-
-            if not filtered_reports:
-                yield f"data: {json.dumps({'type': 'action', 'message': f'Resource {resource_id}: Aucun time-report sur la periode {start_term} - {end_term}'})}\n\n"
+            if not times_reports:
+                yield f"data: {json.dumps({'type': 'action', 'message': f'Resource {resource_id}: Aucun time-report'})}\n\n"
                 success_count += 1
                 continue
 
-            # Get details for each filtered time-report
+            # Get details for each time-report
             resource_entries = []
-            for tr in filtered_reports:
+            for tr in times_reports:
                 tr_id = tr.get("id")
                 if not tr_id:
                     continue

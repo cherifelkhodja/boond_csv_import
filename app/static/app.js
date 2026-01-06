@@ -924,10 +924,6 @@ const exportTimeReports = {
         const actionLog = document.getElementById('export-tr-action-log');
         const resultsSection = document.getElementById('export-tr-results');
 
-        // Get period values
-        const startTerm = document.getElementById('export-tr-start-term').value;
-        const endTerm = document.getElementById('export-tr-end-term').value;
-
         startBtn.disabled = true;
         startBtn.innerHTML = '<span class="spinner"></span>Export en cours...';
         progressContainer.classList.remove('hidden');
@@ -941,8 +937,7 @@ const exportTimeReports = {
             const formData = new FormData();
             formData.append('file', this.file);
 
-            // Build URL with query params
-            const url = `/api/export-time-reports/export?start_term=${startTerm}&end_term=${endTerm}`;
+            const url = `/api/export-time-reports/export`;
 
             const response = await fetch(url, {
                 method: 'POST',
@@ -1035,9 +1030,8 @@ const exportTimeReports = {
             return;
         }
 
-        const startTerm = document.getElementById('export-tr-start-term').value;
-        const endTerm = document.getElementById('export-tr-end-term').value;
-        const filename = `time_reports_${startTerm}_${endTerm}.csv`;
+        const today = new Date().toISOString().split('T')[0];
+        const filename = `time_reports_export_${today}.csv`;
 
         const blob = new Blob([this.csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
