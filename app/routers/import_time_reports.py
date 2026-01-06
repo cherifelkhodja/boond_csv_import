@@ -27,14 +27,24 @@ def _build_regular_time_entry(row: dict) -> dict:
     """Build a regular time entry from a CSV row with fixed values."""
     # Handle case-insensitive column names
     start_date = row.get("startDate") or row.get("startdate") or row.get("StartDate") or ""
+    project_id = row.get("project_id") or row.get("Project_id") or row.get("PROJECT_ID") or ""
+    delivery_id = row.get("delivery_id") or row.get("Delivery_id") or row.get("DELIVERY_ID") or ""
 
     entry = {
         "startDate": start_date,
         "duration": FIXED_DURATION,
         "row": -1,
         "workUnitType": {"reference": FIXED_WORK_UNIT_TYPE_REFERENCE},
-        "batch": {"data": None},
+        "batch": None,
     }
+
+    # Add project if provided
+    if project_id:
+        entry["project"] = {"id": str(project_id)}
+
+    # Add delivery if provided
+    if delivery_id:
+        entry["delivery"] = {"id": str(delivery_id)}
 
     logger.info(f"Built entry: {entry}")
 

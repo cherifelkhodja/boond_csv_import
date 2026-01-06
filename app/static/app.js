@@ -1334,10 +1334,13 @@ const importTimeReports = {
             const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
             const hasTerm = this.headers.some(h => h.toLowerCase() === 'term');
             const hasStartDate = this.headers.some(h => h.toLowerCase() === 'startdate');
-            document.getElementById('import-tr-start-btn').disabled = !hasResourceId || !hasTerm || !hasStartDate || this.rows.length === 0;
+            const hasProjectId = this.headers.some(h => h.toLowerCase() === 'project_id');
+            const hasDeliveryId = this.headers.some(h => h.toLowerCase() === 'delivery_id');
+            const allRequired = hasResourceId && hasTerm && hasStartDate && hasProjectId && hasDeliveryId;
+            document.getElementById('import-tr-start-btn').disabled = !allRequired || this.rows.length === 0;
 
-            if (!hasResourceId || !hasTerm || !hasStartDate) {
-                showNotification('Le fichier doit contenir les colonnes resource_id, term et startDate', 'error');
+            if (!allRequired) {
+                showNotification('Le fichier doit contenir les colonnes resource_id, term, startDate, project_id, delivery_id', 'error');
             }
         };
         reader.readAsText(this.file);
@@ -1389,7 +1392,8 @@ const importTimeReports = {
 
         // Render headers (with action column)
         thead.innerHTML = '<tr>' + this.headers.map(h => {
-            const isRequired = h.toLowerCase() === 'resource_id' || h.toLowerCase() === 'term' || h.toLowerCase() === 'startdate';
+            const lh = h.toLowerCase();
+            const isRequired = lh === 'resource_id' || lh === 'term' || lh === 'startdate' || lh === 'project_id' || lh === 'delivery_id';
             return `<th class="${isRequired ? 'required' : ''}">${escapeHtml(h)}</th>`;
         }).join('') + '<th class="action-col">Actions</th></tr>';
 
