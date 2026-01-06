@@ -1193,6 +1193,120 @@ class BoondClient:
                 logger.error(f"Failed to update contract {contract_id}: {e}")
                 return False, str(e)
 
+    async def get_project(
+        self,
+        project_id: str,
+    ) -> tuple[bool, dict[str, Any] | None, str | None]:
+        """
+        Get project details via GET /projects/{project_id}.
+
+        Args:
+            project_id: The project ID
+
+        Returns: (success, project_data, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/projects/{project_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    return True, data.get("data", {}), None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get project {project_id}: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get project {project_id}: {e}")
+                return False, None, str(e)
+
+    async def get_resource_positionings(
+        self,
+        resource_id: str,
+    ) -> tuple[bool, list[dict[str, Any]], str | None]:
+        """
+        Get all positionings for a resource via GET /resources/{resource_id}/positionings.
+
+        Args:
+            resource_id: The resource ID
+
+        Returns: (success, list of positionings, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/resources/{resource_id}/positionings",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    positionings = data.get("data", [])
+                    logger.info(f"Found {len(positionings)} positionings for resource {resource_id}")
+                    return True, positionings, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get positionings for resource {resource_id}: {error_msg}")
+                    return False, [], error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get positionings for resource {resource_id}: {e}")
+                return False, [], str(e)
+
+    async def update_positioning(
+        self,
+        positioning_id: str,
+        start_date: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Update a positioning via PUT /positionings/{positioning_id}.
+
+        Args:
+            positioning_id: The positioning ID to update
+            start_date: The new start date (YYYY-MM-DD)
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "positioning",
+                "id": str(positioning_id),
+                "attributes": {
+                    "startDate": start_date,
+                }
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/positionings/{positioning_id}",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                    json=payload,
+                )
+
+                if response.status_code in (200, 204):
+                    logger.info(f"Updated positioning {positioning_id} with startDate={start_date}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update positioning {positioning_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update positioning {positioning_id}: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

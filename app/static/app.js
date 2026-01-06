@@ -259,6 +259,15 @@ function setupEntityEventListeners(entity, container) {
             deleteContracts(entity, container);
         });
     }
+
+    // Update positionings button (only for deliveries)
+    const updatePositioningsBtn = container.querySelector('.update-positionings-btn');
+    if (entity === 'deliveries') {
+        updatePositioningsBtn.classList.remove('hidden');
+        updatePositioningsBtn.addEventListener('click', () => {
+            updatePositionings(entity, container);
+        });
+    }
 }
 
 /**
@@ -808,6 +817,57 @@ async function deleteContracts(entity, container) {
     } finally {
         deleteBtn.disabled = false;
         deleteBtn.textContent = 'Supprimer les contrats';
+    }
+}
+
+/**
+ * Update positionings for deliveries
+ */
+async function updatePositionings(entity, container) {
+    const file = entityData[entity].file;
+    if (!file) {
+        const csvContent = createCSVFromData(entity);
+        if (!csvContent || entityData[entity].rows.length === 0) {
+            showNotification('Veuillez d\'abord charger un fichier CSV', 'error');
+            return;
+        }
+    }
+
+    const updateBtn = container.querySelector('.update-positionings-btn');
+    updateBtn.disabled = true;
+    updateBtn.innerHTML = '<span class="spinner"></span>Mise à jour...';
+
+    try {
+        const csvContent = createCSVFromData(entity);
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const formData = new FormData();
+        formData.append('file', blob, 'data.csv');
+
+        const response = await fetch(`/api/${entity}/update-positionings`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        // Store results
+        entityData[entity].importResults = result;
+
+        // Show results
+        displayResults(entity, container, result);
+
+        if (result.failed === 0) {
+            showNotification(`${result.success} positionnement(s) mis à jour avec succès`, 'success');
+        } else {
+            showNotification(`${result.success} succès, ${result.failed} erreur(s)`, 'warning');
+        }
+
+    } catch (error) {
+        console.error('Error updating positionings:', error);
+        showNotification('Erreur lors de la mise à jour des positionnements', 'error');
+    } finally {
+        updateBtn.disabled = false;
+        updateBtn.textContent = 'Actualiser les positionnements';
     }
 }
 
