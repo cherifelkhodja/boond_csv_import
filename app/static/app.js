@@ -1238,6 +1238,9 @@ const importTimeReports = {
     file: null,
     headers: [],
     rows: [],
+    deliveriesFile: null,
+    deliveries: [],
+    unmatchedRows: [],
 
     init() {
         const dropzone = document.getElementById('import-tr-dropzone');
@@ -1246,40 +1249,153 @@ const importTimeReports = {
         const clearBtn = document.getElementById('import-tr-clear-btn');
         const startBtn = document.getElementById('import-tr-start-btn');
 
+        // Deliveries dropzone
+        const deliveriesDropzone = document.getElementById('import-tr-deliveries-dropzone');
+        const deliveriesFileInput = document.getElementById('import-tr-deliveries-file-input');
+        const deliveriesBrowseBtn = document.getElementById('import-tr-deliveries-browse-btn');
+        const deliveriesClearBtn = document.getElementById('import-tr-deliveries-clear-btn');
+
         if (!dropzone) return;
 
-        // Drag and drop handlers
+        // Deliveries drag and drop handlers
+        deliveriesDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            deliveriesDropzone.classList.add('dragover');
+        });
+        deliveriesDropzone.addEventListener('dragleave', () => {
+            deliveriesDropzone.classList.remove('dragover');
+        });
+        deliveriesDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            deliveriesDropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                this.handleDeliveriesFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+        deliveriesBrowseBtn.addEventListener('click', () => deliveriesFileInput.click());
+        deliveriesFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.handleDeliveriesFileSelect(e.target.files[0]);
+            }
+        });
+        deliveriesClearBtn.addEventListener('click', () => this.clearDeliveriesFile());
+
+        // Time reports drag and drop handlers
         dropzone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropzone.classList.add('dragover');
         });
-
         dropzone.addEventListener('dragleave', () => {
             dropzone.classList.remove('dragover');
         });
-
         dropzone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropzone.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                this.handleFileSelect(files[0]);
+            if (e.dataTransfer.files.length > 0) {
+                this.handleFileSelect(e.dataTransfer.files[0]);
             }
         });
-
-        // Browse button
         browseBtn.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleFileSelect(e.target.files[0]);
             }
         });
-
-        // Clear file
         clearBtn.addEventListener('click', () => this.clearFile());
-
-        // Start import
         startBtn.addEventListener('click', () => this.startImport());
+    },
+
+    handleDeliveriesFileSelect(file) {
+        if (!file.name.endsWith('.csv')) {
+            showNotification('Veuillez selectionner un fichier CSV', 'error');
+            return;
+        }
+        this.deliveriesFile = file;
+        document.getElementById('import-tr-deliveries-file-name').textContent = file.name;
+        document.getElementById('import-tr-deliveries-selected-file').classList.remove('hidden');
+        this.parseDeliveries();
+    },
+
+    parseDeliveries() {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const lines = content.split('\n').filter(line => line.trim() !== '');
+            if (lines.length < 2) {
+                showNotification('Le fichier CSV des deliveries est vide', 'error');
+                return;
+            }
+            const delimiter = lines[0].includes(';') ? ';' : ',';
+            const headers = lines[0].split(delimiter).map(h => h.trim());
+
+            // Check required columns
+            const hasDeliveryId = headers.some(h => h.toLowerCase() === 'delivery_id');
+            const hasResourceId = headers.some(h => h.toLowerCase() === 'resource_id');
+            const hasProjectId = headers.some(h => h.toLowerCase() === 'project_id');
+            const hasStartDate = headers.some(h => h.toLowerCase() === 'startdate');
+            const hasEndDate = headers.some(h => h.toLowerCase() === 'enddate');
+
+            if (!hasDeliveryId || !hasResourceId || !hasProjectId || !hasStartDate || !hasEndDate) {
+                showNotification('Le CSV deliveries doit contenir: delivery_id, resource_id, project_id, startDate, endDate', 'error');
+                return;
+            }
+
+            this.deliveries = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = this.parseCSVLine(lines[i], delimiter);
+                if (values.length > 0) {
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index] || '';
+                    });
+                    // Normalize column names
+                    const delivery = {
+                        delivery_id: row.delivery_id || row.Delivery_id || row.DELIVERY_ID,
+                        resource_id: row.resource_id || row.Resource_id || row.RESOURCE_ID,
+                        project_id: row.project_id || row.Project_id || row.PROJECT_ID,
+                        startDate: this.parseDate(row.startDate || row.StartDate || row.STARTDATE),
+                        endDate: this.parseDate(row.endDate || row.EndDate || row.ENDDATE),
+                    };
+                    if (delivery.delivery_id && delivery.resource_id && delivery.startDate && delivery.endDate) {
+                        this.deliveries.push(delivery);
+                    }
+                }
+            }
+
+            const countEl = document.getElementById('import-tr-deliveries-count');
+            countEl.textContent = `${this.deliveries.length} deliveries chargees`;
+            countEl.classList.remove('hidden');
+            showNotification(`${this.deliveries.length} deliveries chargees`, 'success');
+            this.updateStartButton();
+            // Re-match if time reports already loaded
+            if (this.rows.length > 0) {
+                this.matchDeliveries();
+                this.renderPreview();
+            }
+        };
+        reader.readAsText(this.deliveriesFile);
+    },
+
+    parseDate(dateStr) {
+        if (!dateStr) return null;
+        // Handle DD/MM/YYYY format
+        if (dateStr.includes('/')) {
+            const parts = dateStr.split('/');
+            if (parts.length === 3) {
+                return new Date(parts[2], parts[1] - 1, parts[0]);
+            }
+        }
+        // Handle YYYY-MM-DD format
+        return new Date(dateStr);
+    },
+
+    formatDateForAPI(date) {
+        if (!date) return '';
+        const d = new Date(date);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     },
 
     handleFileSelect(file) {
@@ -1287,12 +1403,9 @@ const importTimeReports = {
             showNotification('Veuillez selectionner un fichier CSV', 'error');
             return;
         }
-
         this.file = file;
         document.getElementById('import-tr-file-name').textContent = file.name;
         document.getElementById('import-tr-selected-file').classList.remove('hidden');
-
-        // Parse and preview
         this.parseAndPreview();
     },
 
@@ -1301,20 +1414,23 @@ const importTimeReports = {
         reader.onload = (e) => {
             const content = e.target.result;
             const lines = content.split('\n').filter(line => line.trim() !== '');
-
             if (lines.length < 2) {
                 showNotification('Le fichier CSV est vide ou invalide', 'error');
                 return;
             }
-
-            // Detect delimiter
-            const firstLine = lines[0];
-            const delimiter = firstLine.includes(';') ? ';' : ',';
-
-            // Parse headers
+            const delimiter = lines[0].includes(';') ? ';' : ',';
             this.headers = lines[0].split(delimiter).map(h => h.trim());
 
-            // Parse rows
+            // Check required columns
+            const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
+            const hasTerm = this.headers.some(h => h.toLowerCase() === 'term');
+            const hasStartDate = this.headers.some(h => h.toLowerCase() === 'startdate');
+
+            if (!hasResourceId || !hasTerm || !hasStartDate) {
+                showNotification('Le fichier doit contenir: resource_id, term, startDate', 'error');
+                return;
+            }
+
             this.rows = [];
             for (let i = 1; i < lines.length; i++) {
                 const values = this.parseCSVLine(lines[i], delimiter);
@@ -1327,23 +1443,62 @@ const importTimeReports = {
                 }
             }
 
-            // Render preview
+            // Add project_id and delivery_id columns if not present
+            if (!this.headers.includes('project_id')) this.headers.push('project_id');
+            if (!this.headers.includes('delivery_id')) this.headers.push('delivery_id');
+
+            // Match deliveries
+            this.matchDeliveries();
             this.renderPreview();
-
-            // Enable start button if we have required columns and rows
-            const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
-            const hasTerm = this.headers.some(h => h.toLowerCase() === 'term');
-            const hasStartDate = this.headers.some(h => h.toLowerCase() === 'startdate');
-            const hasProjectId = this.headers.some(h => h.toLowerCase() === 'project_id');
-            const hasDeliveryId = this.headers.some(h => h.toLowerCase() === 'delivery_id');
-            const allRequired = hasResourceId && hasTerm && hasStartDate && hasProjectId && hasDeliveryId;
-            document.getElementById('import-tr-start-btn').disabled = !allRequired || this.rows.length === 0;
-
-            if (!allRequired) {
-                showNotification('Le fichier doit contenir les colonnes resource_id, term, startDate, project_id, delivery_id', 'error');
-            }
+            this.updateStartButton();
         };
         reader.readAsText(this.file);
+    },
+
+    matchDeliveries() {
+        this.unmatchedRows = [];
+        for (const row of this.rows) {
+            const resourceId = row.resource_id || row.Resource_id || row.RESOURCE_ID;
+            const startDateStr = row.startDate || row.StartDate || row.STARTDATE;
+            const entryDate = this.parseDate(startDateStr);
+
+            if (!entryDate || !resourceId) {
+                row.project_id = '';
+                row.delivery_id = '';
+                row._matchStatus = 'error';
+                this.unmatchedRows.push(row);
+                continue;
+            }
+
+            // Find matching delivery
+            const matchingDelivery = this.deliveries.find(d => {
+                return d.resource_id === resourceId &&
+                    entryDate >= d.startDate &&
+                    entryDate <= d.endDate;
+            });
+
+            if (matchingDelivery) {
+                row.project_id = matchingDelivery.project_id;
+                row.delivery_id = matchingDelivery.delivery_id;
+                row._matchStatus = 'matched';
+            } else {
+                row.project_id = '';
+                row.delivery_id = '';
+                row._matchStatus = 'unmatched';
+                this.unmatchedRows.push(row);
+            }
+        }
+
+        if (this.unmatchedRows.length > 0) {
+            showNotification(`${this.unmatchedRows.length} lignes sans delivery correspondante`, 'warning');
+        }
+    },
+
+    updateStartButton() {
+        const hasDeliveries = this.deliveries.length > 0;
+        const hasRows = this.rows.length > 0;
+        const hasMatched = this.rows.some(r => r._matchStatus === 'matched');
+        document.getElementById('import-tr-start-btn').disabled = !hasDeliveries || !hasRows || !hasMatched;
     },
 
     parseCSVLine(line, delimiter = ',') {
@@ -1379,19 +1534,23 @@ const importTimeReports = {
         const rowCount = document.getElementById('import-tr-row-count');
         const reportCount = document.getElementById('import-tr-report-count');
 
-        // Update row count
-        rowCount.textContent = this.rows.length;
+        // Count matched rows
+        const matchedRows = this.rows.filter(r => r._matchStatus === 'matched');
+        rowCount.textContent = `${matchedRows.length}/${this.rows.length}`;
 
-        // Calculate unique resource_id + term combinations
+        // Calculate unique resource_id + term combinations from matched rows
         const uniqueReports = new Set();
-        this.rows.forEach(row => {
-            const key = `${row.resource_id}_${row.term}`;
+        matchedRows.forEach(row => {
+            const resourceId = row.resource_id || row.Resource_id || row.RESOURCE_ID;
+            const term = row.term || row.Term || row.TERM;
+            const key = `${resourceId}_${term}`;
             uniqueReports.add(key);
         });
         reportCount.textContent = uniqueReports.size;
 
-        // Render headers (with action column)
-        thead.innerHTML = '<tr>' + this.headers.map(h => {
+        // Render headers (with status and action columns)
+        const displayHeaders = this.headers.filter(h => !h.startsWith('_'));
+        thead.innerHTML = '<tr><th>Status</th>' + displayHeaders.map(h => {
             const lh = h.toLowerCase();
             const isRequired = lh === 'resource_id' || lh === 'term' || lh === 'startdate' || lh === 'project_id' || lh === 'delivery_id';
             return `<th class="${isRequired ? 'required' : ''}">${escapeHtml(h)}</th>`;
@@ -1400,8 +1559,11 @@ const importTimeReports = {
         // Render rows (limit to 100 for performance)
         const displayRows = this.rows.slice(0, 100);
         tbody.innerHTML = displayRows.map((row, index) => {
-            return '<tr data-index="' + index + '">' +
-                this.headers.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') +
+            const statusClass = row._matchStatus === 'matched' ? 'status-success' : 'status-error';
+            const statusText = row._matchStatus === 'matched' ? '✓' : '✗';
+            return `<tr data-index="${index}" class="${row._matchStatus !== 'matched' ? 'row-unmatched' : ''}">` +
+                `<td class="${statusClass}">${statusText}</td>` +
+                displayHeaders.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') +
                 `<td class="action-col"><button class="btn-delete-row" onclick="importTimeReports.deleteRow(${index})" title="Supprimer cette ligne">✕</button></td>` +
                 '</tr>';
         }).join('');
@@ -1414,30 +1576,43 @@ const importTimeReports = {
             tbody.parentNode.insertAdjacentElement('afterend', warning);
         }
 
-        // Show preview section
         previewSection.classList.remove('hidden');
-
-        // Update start button state
-        document.getElementById('import-tr-start-btn').disabled = this.rows.length === 0;
     },
 
     deleteRow(index) {
         if (index >= 0 && index < this.rows.length) {
             this.rows.splice(index, 1);
+            this.matchDeliveries();
             this.renderPreview();
+            this.updateStartButton();
             showNotification('Ligne supprimee', 'info');
         }
+    },
+
+    clearDeliveriesFile() {
+        this.deliveriesFile = null;
+        this.deliveries = [];
+        document.getElementById('import-tr-deliveries-file-input').value = '';
+        document.getElementById('import-tr-deliveries-selected-file').classList.add('hidden');
+        document.getElementById('import-tr-deliveries-count').classList.add('hidden');
+        // Re-match to clear project/delivery
+        if (this.rows.length > 0) {
+            this.matchDeliveries();
+            this.renderPreview();
+        }
+        this.updateStartButton();
     },
 
     clearFile() {
         this.file = null;
         this.headers = [];
         this.rows = [];
+        this.unmatchedRows = [];
         document.getElementById('import-tr-file-input').value = '';
         document.getElementById('import-tr-selected-file').classList.add('hidden');
         document.getElementById('import-tr-preview-section').classList.add('hidden');
-        document.getElementById('import-tr-start-btn').disabled = true;
         document.getElementById('import-tr-results').classList.add('hidden');
+        this.updateStartButton();
     },
 
     async startImport() {
@@ -1459,10 +1634,12 @@ const importTimeReports = {
         actionLog.innerHTML = '';
 
         try {
-            // Generate CSV from modified rows
-            const csvLines = [this.headers.join(',')];
-            for (const row of this.rows) {
-                const values = this.headers.map(h => {
+            // Generate CSV from matched rows only
+            const matchedRows = this.rows.filter(r => r._matchStatus === 'matched');
+            const exportHeaders = this.headers.filter(h => !h.startsWith('_'));
+            const csvLines = [exportHeaders.join(',')];
+            for (const row of matchedRows) {
+                const values = exportHeaders.map(h => {
                     const val = row[h] || '';
                     if (val.includes(',') || val.includes('"') || val.includes('\n')) {
                         return `"${val.replace(/"/g, '""')}"`;

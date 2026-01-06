@@ -107,10 +107,32 @@
         </div>
         <div class="tab-content" id="tab-import-time-reports">
             <div class="entity-container" data-entity="import-time-reports">
-                <!-- Upload Section -->
+                <!-- Deliveries CSV Section -->
                 <section class="section upload-section">
-                    <h2>1. Fichier CSV des time-reports</h2>
-                    <p class="section-note">Colonnes requises: <code>resource_id, term, startDate, project_id, delivery_id</code><br>Valeurs fixes: type=regular, duration=1, workUnitType_reference=1</p>
+                    <h2>1. Fichier CSV des deliveries</h2>
+                    <p class="section-note">Colonnes requises: <code>delivery_id, resource_id, project_id, startDate, endDate</code></p>
+                    <div class="dropzone" id="import-tr-deliveries-dropzone" tabindex="0">
+                        <div class="dropzone-content">
+                            <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p>Glissez-deposez le CSV des deliveries</p>
+                            <p class="dropzone-or">ou</p>
+                            <button class="btn btn-secondary" id="import-tr-deliveries-browse-btn">Parcourir</button>
+                        </div>
+                        <input type="file" id="import-tr-deliveries-file-input" accept=".csv" hidden>
+                    </div>
+                    <div class="selected-file hidden" id="import-tr-deliveries-selected-file">
+                        <span class="file-name" id="import-tr-deliveries-file-name"></span>
+                        <button class="btn btn-text" id="import-tr-deliveries-clear-btn">X</button>
+                    </div>
+                    <p class="section-note hidden" id="import-tr-deliveries-count"></p>
+                </section>
+
+                <!-- Time Reports CSV Section -->
+                <section class="section upload-section">
+                    <h2>2. Fichier CSV des time-reports</h2>
+                    <p class="section-note">Colonnes requises: <code>resource_id, term, startDate</code><br>project_id et delivery_id seront determines automatiquement via le CSV des deliveries</p>
                     <div class="dropzone" id="import-tr-dropzone" tabindex="0">
                         <div class="dropzone-content">
                             <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
