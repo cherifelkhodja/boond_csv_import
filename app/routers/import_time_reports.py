@@ -25,13 +25,18 @@ FIXED_DURATION = 1
 
 def _build_regular_time_entry(row: dict) -> dict:
     """Build a regular time entry from a CSV row with fixed values."""
+    # Handle case-insensitive column names
+    start_date = row.get("startDate") or row.get("startdate") or row.get("StartDate") or ""
+
     entry = {
-        "startDate": row.get("startDate", ""),
+        "startDate": start_date,
         "duration": FIXED_DURATION,
         "row": -1,
         "workUnitType": {"reference": FIXED_WORK_UNIT_TYPE_REFERENCE},
         "batch": {"data": None},
     }
+
+    logger.info(f"Built entry: {entry}")
 
     return entry
 
@@ -45,15 +50,19 @@ def _group_entries_by_resource_term(rows: list[dict]) -> dict:
     grouped = defaultdict(list)
 
     for row in rows:
-        resource_id = row.get("resource_id", "")
-        term = row.get("term", "")
+        # Handle case-insensitive column names
+        resource_id = row.get("resource_id") or row.get("Resource_id") or row.get("RESOURCE_ID") or ""
+        term = row.get("term") or row.get("Term") or row.get("TERM") or ""
 
         if not resource_id or not term:
+            logger.warning(f"Skipping row with missing resource_id or term: {row}")
             continue
 
         key = (resource_id, term)
         entry = _build_regular_time_entry(row)
         grouped[key].append(entry)
+
+    logger.info(f"Grouped {len(grouped)} time-reports from {len(rows)} rows")
 
     return grouped
 

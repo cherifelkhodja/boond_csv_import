@@ -1420,6 +1420,7 @@ class BoondClient:
         }
 
         logger.info(f"Creating time-report for resource {resource_id}, term {term}")
+        logger.info(f"Payload: {payload}")
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
