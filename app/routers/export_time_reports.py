@@ -25,12 +25,13 @@ def _extract_time_entries(
 ) -> list[dict]:
     """
     Extract time entries (regular and exceptional) from a time-report detail.
+    Only keeps entries with workUnitType_name='Normale' and workUnitType_activityType='production'.
 
     Args:
         time_report_data: Full time-report response with data, included
         resource_id: The resource ID for the export
 
-    Returns: List of CSV row dicts
+    Returns: List of CSV row dicts (filtered)
     """
     entries = []
     data = time_report_data.get("data", {})
@@ -64,6 +65,10 @@ def _extract_time_entries(
         wut_reference = work_unit_type.get("reference", "")
         wut_name = work_unit_type.get("name", "")
         wut_activity_type = work_unit_type.get("activityType", "")
+
+        # Filter: only keep entries with workUnitType_name='Normale' and activityType='production'
+        if wut_name != "Normale" or wut_activity_type != "production":
+            continue
 
         # Extract relationships
         project_data = reg.get("project", {})
@@ -117,6 +122,10 @@ def _extract_time_entries(
         wut_reference = work_unit_type.get("reference", "")
         wut_name = work_unit_type.get("name", "")
         wut_activity_type = work_unit_type.get("activityType", "")
+
+        # Filter: only keep entries with workUnitType_name='Normale' and activityType='production'
+        if wut_name != "Normale" or wut_activity_type != "production":
+            continue
 
         # Extract relationships
         project_data = exc.get("project", {})
