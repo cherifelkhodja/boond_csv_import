@@ -1386,6 +1386,7 @@ class BoondClient:
         term: str,
         regular_times: list[dict[str, Any]] | None = None,
         exceptional_times: list[dict[str, Any]] | None = None,
+        agency_id: str = "5",
     ) -> tuple[bool, str | None, str | None]:
         """
         Create a time-report via POST /times-reports.
@@ -1395,25 +1396,24 @@ class BoondClient:
             term: The term (YYYY-MM format)
             regular_times: List of regular time entries
             exceptional_times: List of exceptional time entries
+            agency_id: The agency ID (default: 5)
 
         Returns: (success, time_report_id, error_message)
         """
-        attributes: dict[str, Any] = {
-            "term": term,
-        }
-
-        if regular_times:
-            attributes["regularTimes"] = regular_times
-        if exceptional_times:
-            attributes["exceptionalTimes"] = exceptional_times
-
         payload = {
             "data": {
-                "type": "times-report",
-                "attributes": attributes,
+                "type": "timesreport",
+                "attributes": {
+                    "term": term,
+                    "regularTimes": regular_times or [],
+                    "exceptionalTimes": exceptional_times or [],
+                },
                 "relationships": {
-                    "dependsOn": {
-                        "data": {"type": "resource", "id": str(resource_id)}
+                    "resource": {
+                        "data": {"id": str(resource_id), "type": "resource"}
+                    },
+                    "agency": {
+                        "data": {"id": str(agency_id), "type": "agency"}
                     }
                 }
             }

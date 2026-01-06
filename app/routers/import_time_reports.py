@@ -28,7 +28,9 @@ def _build_regular_time_entry(row: dict) -> dict:
     entry = {
         "startDate": row.get("startDate", ""),
         "duration": FIXED_DURATION,
+        "row": -1,
         "workUnitType": {"reference": FIXED_WORK_UNIT_TYPE_REFERENCE},
+        "batch": {"data": None},
     }
 
     return entry
