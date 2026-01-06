@@ -21,7 +21,6 @@ DEFAULT_API_DELAY_MS = 100
 # Fixed values for import
 FIXED_WORK_UNIT_TYPE_REFERENCE = "1"
 FIXED_DURATION = 1
-FIXED_AGENCY_ID = "5"
 
 
 def _build_regular_time_entry(row: dict) -> dict:
@@ -75,9 +74,6 @@ async def import_time_reports(
     - type: regular
     - duration: 1
     - workUnitType_reference: 1
-    - workUnitType_name: Normale
-    - workUnitType_activityType: production
-    - agency_id: 5
     """
     content = await file.read()
     try:
