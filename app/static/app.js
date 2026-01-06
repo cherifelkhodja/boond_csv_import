@@ -1112,12 +1112,45 @@ const exportTimeReports = {
                 successCount.textContent = `Resources traitees: ${data.success}/${data.total}`;
                 entriesCount.textContent = `Entrees exportees: ${data.total_entries}`;
 
+                // Render output CSV preview
+                this.renderOutputPreview(data.csv_content);
+
                 if (data.failed === 0) {
                     showNotification(`Export termine ! ${data.total_entries} entrees exportees.`, 'success');
                 } else {
                     showNotification(`Export termine avec ${data.failed} erreur(s).`, 'warning');
                 }
                 break;
+        }
+    },
+
+    renderOutputPreview(csvContent) {
+        if (!csvContent) return;
+
+        const table = document.getElementById('export-tr-output-table');
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+
+        const lines = csvContent.trim().split('\n');
+        if (lines.length === 0) return;
+
+        // Parse headers
+        const headers = this.parseCSVLine(lines[0], ',');
+
+        // Render headers
+        thead.innerHTML = '<tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
+
+        // Parse and render rows (limit to 100 for performance)
+        const maxRows = Math.min(lines.length - 1, 100);
+        let rowsHtml = '';
+        for (let i = 1; i <= maxRows; i++) {
+            const values = this.parseCSVLine(lines[i], ',');
+            rowsHtml += '<tr>' + values.map(v => `<td>${escapeHtml(v)}</td>`).join('') + '</tr>';
+        }
+        tbody.innerHTML = rowsHtml;
+
+        if (lines.length - 1 > 100) {
+            tbody.innerHTML += `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--text-light);">... et ${lines.length - 101} autres lignes</td></tr>`;
         }
     },
 
