@@ -831,6 +831,8 @@ document.head.appendChild(style);
 const exportTimeReports = {
     file: null,
     csvContent: null,
+    headers: [],
+    rows: [],
 
     init() {
         const dropzone = document.getElementById('export-tr-dropzone');
@@ -895,19 +897,114 @@ const exportTimeReports = {
         });
     },
 
-    handleFileSelect(file) {
+    async handleFileSelect(file) {
         this.file = file;
         document.getElementById('export-tr-selected-file').classList.remove('hidden');
         document.getElementById('export-tr-file-name').textContent = file.name;
-        document.getElementById('export-tr-start-btn').disabled = false;
+
+        // Parse CSV and show preview
+        const content = await file.text();
+        this.parseAndPreview(content);
+    },
+
+    parseAndPreview(content) {
+        const lines = content.trim().split('\n');
+        if (lines.length === 0) return;
+
+        // Detect delimiter
+        const firstLine = lines[0];
+        const semicolons = (firstLine.match(/;/g) || []).length;
+        const commas = (firstLine.match(/,/g) || []).length;
+        const delimiter = semicolons > commas ? ';' : ',';
+
+        // Parse headers
+        this.headers = lines[0].split(delimiter).map(h => h.trim());
+
+        // Parse rows
+        this.rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const values = this.parseCSVLine(lines[i], delimiter);
+            if (values.length > 0 && values.some(v => v.trim() !== '')) {
+                const row = {};
+                this.headers.forEach((header, index) => {
+                    row[header] = values[index] || '';
+                });
+                this.rows.push(row);
+            }
+        }
+
+        // Render preview
+        this.renderPreview();
+
+        // Enable start button if we have resource_id column and rows
+        const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
+        document.getElementById('export-tr-start-btn').disabled = !hasResourceId || this.rows.length === 0;
+
+        if (!hasResourceId) {
+            showNotification('Le fichier doit contenir une colonne resource_id', 'error');
+        }
+    },
+
+    parseCSVLine(line, delimiter = ',') {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === delimiter && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    },
+
+    renderPreview() {
+        const previewSection = document.getElementById('export-tr-preview-section');
+        const table = document.getElementById('export-tr-preview-table');
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+        const rowCount = document.getElementById('export-tr-row-count');
+
+        // Update row count
+        rowCount.textContent = this.rows.length;
+
+        // Render headers
+        thead.innerHTML = '<tr>' + this.headers.map(h => {
+            const isResourceId = h.toLowerCase() === 'resource_id';
+            return `<th class="${isResourceId ? 'required' : ''}">${escapeHtml(h)}</th>`;
+        }).join('') + '</tr>';
+
+        // Render rows (limit to 100 for performance)
+        const displayRows = this.rows.slice(0, 100);
+        tbody.innerHTML = displayRows.map(row => {
+            return '<tr>' + this.headers.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') + '</tr>';
+        }).join('');
+
+        // Show preview section
+        previewSection.classList.remove('hidden');
     },
 
     clearFile() {
         this.file = null;
         this.csvContent = null;
+        this.headers = [];
+        this.rows = [];
         document.getElementById('export-tr-selected-file').classList.add('hidden');
         document.getElementById('export-tr-file-input').value = '';
         document.getElementById('export-tr-start-btn').disabled = true;
+        document.getElementById('export-tr-preview-section').classList.add('hidden');
         document.getElementById('export-tr-progress').classList.add('hidden');
         document.getElementById('export-tr-results').classList.add('hidden');
         document.getElementById('export-tr-action-log').innerHTML = '';
