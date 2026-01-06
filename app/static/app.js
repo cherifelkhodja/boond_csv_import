@@ -1043,21 +1043,44 @@ const exportTimeReports = {
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+            let buffer = '';
 
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
 
-                const text = decoder.decode(value);
-                const lines = text.split('\n');
+                buffer += decoder.decode(value, { stream: true });
 
+                // Process complete lines (SSE messages end with \n\n)
+                const messages = buffer.split('\n\n');
+                // Keep incomplete message in buffer
+                buffer = messages.pop() || '';
+
+                for (const message of messages) {
+                    const lines = message.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                this.handleSSEEvent(data);
+                            } catch (e) {
+                                console.error('Error parsing SSE:', e, line.substring(0, 100));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+                const lines = buffer.split('\n');
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.substring(6));
                             this.handleSSEEvent(data);
                         } catch (e) {
-                            console.error('Error parsing SSE:', e);
+                            console.error('Error parsing final SSE:', e);
                         }
                     }
                 }
