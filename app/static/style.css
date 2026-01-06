@@ -609,3 +609,33 @@ td input.error {
     color: var(--primary-color);
     font-weight: 600;
 }
+
+/* Delete row button in preview table */
+.btn-delete-row {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.btn-delete-row:hover {
+    background-color: #fef2f2;
+    color: var(--error-color);
+}
+
+.action-col {
+    width: 80px;
+    text-align: center;
+}
+
+.preview-warning {
+    padding: 0.5rem 1rem;
+    background-color: #fff3cd;
+    color: #856404;
+    font-size: 0.875rem;
+    border-top: 1px solid var(--border-color);
+}

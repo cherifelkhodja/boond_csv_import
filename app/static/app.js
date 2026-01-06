@@ -980,20 +980,42 @@ const exportTimeReports = {
         // Update row count
         rowCount.textContent = this.rows.length;
 
-        // Render headers
+        // Render headers (with action column)
         thead.innerHTML = '<tr>' + this.headers.map(h => {
             const isResourceId = h.toLowerCase() === 'resource_id';
             return `<th class="${isResourceId ? 'required' : ''}">${escapeHtml(h)}</th>`;
-        }).join('') + '</tr>';
+        }).join('') + '<th class="action-col">Actions</th></tr>';
 
         // Render rows (limit to 100 for performance)
         const displayRows = this.rows.slice(0, 100);
-        tbody.innerHTML = displayRows.map(row => {
-            return '<tr>' + this.headers.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') + '</tr>';
+        tbody.innerHTML = displayRows.map((row, index) => {
+            return '<tr data-index="' + index + '">' +
+                this.headers.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') +
+                `<td class="action-col"><button class="btn-delete-row" onclick="exportTimeReports.deleteRow(${index})" title="Supprimer cette ligne">✕</button></td>` +
+                '</tr>';
         }).join('');
+
+        // Show warning if more than 100 rows
+        if (this.rows.length > 100) {
+            const warning = document.createElement('div');
+            warning.className = 'preview-warning';
+            warning.textContent = `Affichage limité à 100 lignes sur ${this.rows.length}. Toutes les lignes seront exportées.`;
+            tbody.parentNode.insertAdjacentElement('afterend', warning);
+        }
 
         // Show preview section
         previewSection.classList.remove('hidden');
+
+        // Update start button state
+        document.getElementById('export-tr-start-btn').disabled = this.rows.length === 0;
+    },
+
+    deleteRow(index) {
+        if (index >= 0 && index < this.rows.length) {
+            this.rows.splice(index, 1);
+            this.renderPreview();
+            showNotification('Ligne supprimée', 'info');
+        }
     },
 
     clearFile() {
@@ -1031,8 +1053,25 @@ const exportTimeReports = {
         actionLog.innerHTML = '';
 
         try {
+            // Generate CSV from modified rows (in case user deleted some)
+            const csvLines = [this.headers.join(',')];
+            for (const row of this.rows) {
+                const values = this.headers.map(h => {
+                    const val = row[h] || '';
+                    // Escape values with comma, quote, or newline
+                    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                        return `"${val.replace(/"/g, '""')}"`;
+                    }
+                    return val;
+                });
+                csvLines.push(values.join(','));
+            }
+            const csvContent = csvLines.join('\n');
+            const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+            const csvFile = new File([csvBlob], 'export.csv', { type: 'text/csv' });
+
             const formData = new FormData();
-            formData.append('file', this.file);
+            formData.append('file', csvFile);
 
             const url = `/api/export-time-reports/export`;
 
