@@ -1446,6 +1446,41 @@ class BoondClient:
                 logger.error(f"Failed to create time-report: {e}")
                 return False, None, str(e)
 
+    async def validate_time_report(
+        self,
+        time_report_id: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Validate a time-report via POST /times-reports/{id}/validate.
+
+        Args:
+            time_report_id: The time-report ID to validate
+
+        Returns: (success, error_message)
+        """
+        logger.info(f"Validating time-report {time_report_id}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/times-reports/{time_report_id}/validate",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201, 204):
+                    logger.info(f"Validated time-report {time_report_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to validate time-report {time_report_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to validate time-report {time_report_id}: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

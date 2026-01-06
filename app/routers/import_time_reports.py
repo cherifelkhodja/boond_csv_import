@@ -141,8 +141,18 @@ async def import_time_reports(
 
             if success:
                 yield f"data: {json.dumps({'type': 'action', 'message': f'Resource {resource_id} - {term}: time-report {time_report_id} cree ({entries_count} entrees)'})}\n\n"
-                success_count += 1
-                total_entries_imported += entries_count
+
+                # Validate the time-report
+                yield f"data: {json.dumps({'type': 'action', 'message': f'POST /times-reports/{time_report_id}/validate'})}\n\n"
+                validate_success, validate_error = await client.validate_time_report(time_report_id)
+
+                if validate_success:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'Resource {resource_id} - {term}: time-report {time_report_id} valide'})}\n\n"
+                    success_count += 1
+                    total_entries_imported += entries_count
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'ERROR Resource {resource_id} - {term}: validation echouee - {validate_error}'})}\n\n"
+                    failed_count += 1
             else:
                 yield f"data: {json.dumps({'type': 'action', 'message': f'ERROR Resource {resource_id} - {term}: {error}'})}\n\n"
                 failed_count += 1
