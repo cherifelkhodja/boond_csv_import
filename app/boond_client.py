@@ -1264,14 +1264,14 @@ class BoondClient:
     async def update_positioning(
         self,
         positioning_id: str,
-        update_date: str,
+        main_manager_id: str = "1099",
     ) -> tuple[bool, str | None]:
         """
         Update a positioning via PUT /positionings/{positioning_id}.
 
         Args:
             positioning_id: The positioning ID to update
-            update_date: The new update date (format: 2026-01-05T12:23:25+0100)
+            main_manager_id: The resource ID of the main manager (default: 1099)
 
         Returns: (success, error_message)
         """
@@ -1279,8 +1279,13 @@ class BoondClient:
             "data": {
                 "type": "positioning",
                 "id": str(positioning_id),
-                "attributes": {
-                    "updateDate": update_date,
+                "relationships": {
+                    "mainManager": {
+                        "data": {
+                            "id": str(main_manager_id),
+                            "type": "resource"
+                        }
+                    }
                 }
             }
         }
@@ -1295,7 +1300,7 @@ class BoondClient:
                 )
 
                 if response.status_code in (200, 204):
-                    logger.info(f"Updated positioning {positioning_id} with updateDate={update_date}")
+                    logger.info(f"Updated positioning {positioning_id} with mainManager={main_manager_id}")
                     return True, None
                 else:
                     error_data = response.json() if response.content else {}

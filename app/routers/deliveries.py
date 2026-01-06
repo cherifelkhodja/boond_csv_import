@@ -384,12 +384,10 @@ async def update_positionings(file: UploadFile = File(...)) -> StreamingResponse
         for (project_id, resource_id), deliveries in deliveries_by_pair.items():
             current += 1
 
-            # Find first delivery by start_date
-            first_delivery = _find_first_delivery(deliveries)
+            # Get first delivery for row number reference
+            first_delivery = deliveries[0] if deliveries else None
             if not first_delivery:
                 continue
-
-            start_date_str = first_delivery.get("start_date")
 
             # Send progress event
             progress_event = {
@@ -400,37 +398,6 @@ async def update_positionings(file: UploadFile = File(...)) -> StreamingResponse
                 "percent": int((current / total_pairs) * 100),
             }
             yield f"data: {json.dumps(progress_event)}\n\n"
-
-            if not start_date_str:
-                results.append({
-                    "row": first_delivery["row_num"],
-                    "status": "error",
-                    "id": None,
-                    "message": "Pas de start_date",
-                })
-                failed_count += 1
-                continue
-
-            # Parse and format start_date
-            try:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            except ValueError:
-                try:
-                    start_date = datetime.strptime(start_date_str, "%d/%m/%Y").date()
-                except ValueError:
-                    results.append({
-                        "row": first_delivery["row_num"],
-                        "status": "error",
-                        "id": None,
-                        "message": f"Format de date invalide: {start_date_str}",
-                    })
-                    failed_count += 1
-                    continue
-
-            # Format as datetime with timezone (e.g., 2026-01-05T12:23:25+0100)
-            paris_tz = timezone(timedelta(hours=1))
-            update_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=paris_tz)
-            update_date_formatted = update_datetime.strftime("%Y-%m-%dT%H:%M:%S%z")
 
             # Send action event
             yield f"data: {json.dumps({'type': 'action', 'message': f'GET /projects/{project_id}'})}\n\n"
@@ -508,20 +475,20 @@ async def update_positionings(file: UploadFile = File(...)) -> StreamingResponse
             # Send action event
             yield f"data: {json.dumps({'type': 'action', 'message': f'PUT /positionings/{positioning_id}'})}\n\n"
 
-            # Update the positioning
-            success, error = await client.update_positioning(positioning_id, update_date_formatted)
+            # Update the positioning (set mainManager to 1099)
+            success, error = await client.update_positioning(positioning_id)
 
             if success:
                 results.append({
                     "row": first_delivery["row_num"],
                     "status": "success",
                     "id": positioning_id,
-                    "message": f"Positionnement {positioning_id} mis à jour (updateDate={update_date_formatted})",
+                    "message": f"Positionnement {positioning_id} mis à jour (mainManager=1099)",
                 })
                 success_count += 1
                 logger.info(
                     f"Updated positioning {positioning_id} for project {project_id}, "
-                    f"resource {resource_id} with updateDate={update_date_formatted}"
+                    f"resource {resource_id} with mainManager=1099"
                 )
             else:
                 results.append({
