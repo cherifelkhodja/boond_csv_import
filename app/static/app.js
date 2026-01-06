@@ -1233,7 +1233,357 @@ const exportTimeReports = {
     }
 };
 
-// Initialize Export Time Reports when DOM is ready
+// Import Time Reports functionality
+const importTimeReports = {
+    file: null,
+    headers: [],
+    rows: [],
+
+    init() {
+        const dropzone = document.getElementById('import-tr-dropzone');
+        const fileInput = document.getElementById('import-tr-file-input');
+        const browseBtn = document.getElementById('import-tr-browse-btn');
+        const clearBtn = document.getElementById('import-tr-clear-btn');
+        const startBtn = document.getElementById('import-tr-start-btn');
+
+        if (!dropzone) return;
+
+        // Drag and drop handlers
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                this.handleFileSelect(files[0]);
+            }
+        });
+
+        // Browse button
+        browseBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        // Clear file
+        clearBtn.addEventListener('click', () => this.clearFile());
+
+        // Start import
+        startBtn.addEventListener('click', () => this.startImport());
+    },
+
+    handleFileSelect(file) {
+        if (!file.name.endsWith('.csv')) {
+            showNotification('Veuillez selectionner un fichier CSV', 'error');
+            return;
+        }
+
+        this.file = file;
+        document.getElementById('import-tr-file-name').textContent = file.name;
+        document.getElementById('import-tr-selected-file').classList.remove('hidden');
+
+        // Parse and preview
+        this.parseAndPreview();
+    },
+
+    parseAndPreview() {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            const lines = content.split('\n').filter(line => line.trim() !== '');
+
+            if (lines.length < 2) {
+                showNotification('Le fichier CSV est vide ou invalide', 'error');
+                return;
+            }
+
+            // Detect delimiter
+            const firstLine = lines[0];
+            const delimiter = firstLine.includes(';') ? ';' : ',';
+
+            // Parse headers
+            this.headers = lines[0].split(delimiter).map(h => h.trim());
+
+            // Parse rows
+            this.rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = this.parseCSVLine(lines[i], delimiter);
+                if (values.length > 0 && values.some(v => v.trim() !== '')) {
+                    const row = {};
+                    this.headers.forEach((header, index) => {
+                        row[header] = values[index] || '';
+                    });
+                    this.rows.push(row);
+                }
+            }
+
+            // Render preview
+            this.renderPreview();
+
+            // Enable start button if we have required columns and rows
+            const hasResourceId = this.headers.some(h => h.toLowerCase() === 'resource_id');
+            const hasTerm = this.headers.some(h => h.toLowerCase() === 'term');
+            document.getElementById('import-tr-start-btn').disabled = !hasResourceId || !hasTerm || this.rows.length === 0;
+
+            if (!hasResourceId || !hasTerm) {
+                showNotification('Le fichier doit contenir les colonnes resource_id et term', 'error');
+            }
+        };
+        reader.readAsText(this.file);
+    },
+
+    parseCSVLine(line, delimiter = ',') {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+                if (inQuotes && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === delimiter && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    },
+
+    renderPreview() {
+        const previewSection = document.getElementById('import-tr-preview-section');
+        const table = document.getElementById('import-tr-preview-table');
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+        const rowCount = document.getElementById('import-tr-row-count');
+        const reportCount = document.getElementById('import-tr-report-count');
+
+        // Update row count
+        rowCount.textContent = this.rows.length;
+
+        // Calculate unique resource_id + term combinations
+        const uniqueReports = new Set();
+        this.rows.forEach(row => {
+            const key = `${row.resource_id}_${row.term}`;
+            uniqueReports.add(key);
+        });
+        reportCount.textContent = uniqueReports.size;
+
+        // Render headers (with action column)
+        thead.innerHTML = '<tr>' + this.headers.map(h => {
+            const isRequired = h.toLowerCase() === 'resource_id' || h.toLowerCase() === 'term';
+            return `<th class="${isRequired ? 'required' : ''}">${escapeHtml(h)}</th>`;
+        }).join('') + '<th class="action-col">Actions</th></tr>';
+
+        // Render rows (limit to 100 for performance)
+        const displayRows = this.rows.slice(0, 100);
+        tbody.innerHTML = displayRows.map((row, index) => {
+            return '<tr data-index="' + index + '">' +
+                this.headers.map(h => `<td>${escapeHtml(row[h] || '')}</td>`).join('') +
+                `<td class="action-col"><button class="btn-delete-row" onclick="importTimeReports.deleteRow(${index})" title="Supprimer cette ligne">✕</button></td>` +
+                '</tr>';
+        }).join('');
+
+        // Show warning if more than 100 rows
+        if (this.rows.length > 100) {
+            const warning = document.createElement('div');
+            warning.className = 'preview-warning';
+            warning.textContent = `Affichage limite a 100 lignes sur ${this.rows.length}. Toutes les lignes seront importees.`;
+            tbody.parentNode.insertAdjacentElement('afterend', warning);
+        }
+
+        // Show preview section
+        previewSection.classList.remove('hidden');
+
+        // Update start button state
+        document.getElementById('import-tr-start-btn').disabled = this.rows.length === 0;
+    },
+
+    deleteRow(index) {
+        if (index >= 0 && index < this.rows.length) {
+            this.rows.splice(index, 1);
+            this.renderPreview();
+            showNotification('Ligne supprimee', 'info');
+        }
+    },
+
+    clearFile() {
+        this.file = null;
+        this.headers = [];
+        this.rows = [];
+        document.getElementById('import-tr-file-input').value = '';
+        document.getElementById('import-tr-selected-file').classList.add('hidden');
+        document.getElementById('import-tr-preview-section').classList.add('hidden');
+        document.getElementById('import-tr-start-btn').disabled = true;
+        document.getElementById('import-tr-results').classList.add('hidden');
+    },
+
+    async startImport() {
+        const startBtn = document.getElementById('import-tr-start-btn');
+        const progressContainer = document.getElementById('import-tr-progress');
+        const progressFill = document.getElementById('import-tr-progress-fill');
+        const progressText = document.getElementById('import-tr-progress-text');
+        const progressAction = document.getElementById('import-tr-progress-action');
+        const actionLog = document.getElementById('import-tr-action-log');
+        const resultsSection = document.getElementById('import-tr-results');
+
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<span class="spinner"></span>Import en cours...';
+        progressContainer.classList.remove('hidden');
+        resultsSection.classList.add('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        progressAction.textContent = '';
+        actionLog.innerHTML = '';
+
+        try {
+            // Generate CSV from modified rows
+            const csvLines = [this.headers.join(',')];
+            for (const row of this.rows) {
+                const values = this.headers.map(h => {
+                    const val = row[h] || '';
+                    if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                        return `"${val.replace(/"/g, '""')}"`;
+                    }
+                    return val;
+                });
+                csvLines.push(values.join(','));
+            }
+            const csvContent = csvLines.join('\n');
+            const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+            const csvFile = new File([csvBlob], 'import.csv', { type: 'text/csv' });
+
+            const formData = new FormData();
+            formData.append('file', csvFile);
+
+            const url = `/api/import-time-reports/import`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines (SSE messages end with \n\n)
+                const messages = buffer.split('\n\n');
+                buffer = messages.pop() || '';
+
+                for (const message of messages) {
+                    const lines = message.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                this.handleSSEEvent(data);
+                            } catch (e) {
+                                console.error('Error parsing SSE:', e, line.substring(0, 100));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process any remaining buffer
+            if (buffer.trim()) {
+                const lines = buffer.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            this.handleSSEEvent(data);
+                        } catch (e) {
+                            console.error('Error parsing final SSE:', e);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showNotification('Erreur lors de l\'import', 'error');
+        } finally {
+            startBtn.disabled = false;
+            startBtn.textContent = 'Lancer l\'import';
+        }
+    },
+
+    handleSSEEvent(data) {
+        const progressFill = document.getElementById('import-tr-progress-fill');
+        const progressText = document.getElementById('import-tr-progress-text');
+        const progressAction = document.getElementById('import-tr-progress-action');
+        const actionLog = document.getElementById('import-tr-action-log');
+        const resultsSection = document.getElementById('import-tr-results');
+        const successCount = document.getElementById('import-tr-success-count');
+        const failedCount = document.getElementById('import-tr-failed-count');
+        const entriesCount = document.getElementById('import-tr-entries-count');
+
+        switch (data.type) {
+            case 'progress':
+                progressFill.style.width = `${data.percent}%`;
+                progressText.textContent = `${data.percent}% (${data.current}/${data.total})`;
+                progressAction.textContent = data.action;
+                break;
+
+            case 'action':
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                if (data.message.startsWith('ERROR')) {
+                    logEntry.classList.add('error');
+                } else if (data.message.includes('cree')) {
+                    logEntry.classList.add('success');
+                }
+                logEntry.textContent = data.message;
+                actionLog.appendChild(logEntry);
+                actionLog.scrollTop = actionLog.scrollHeight;
+                break;
+
+            case 'complete':
+                progressFill.style.width = '100%';
+                progressText.textContent = '100%';
+
+                // Show results
+                resultsSection.classList.remove('hidden');
+                successCount.textContent = `Time-reports crees: ${data.success}/${data.total}`;
+                failedCount.textContent = data.failed > 0 ? `Echecs: ${data.failed}` : '';
+                entriesCount.textContent = `Entrees importees: ${data.total_entries}`;
+
+                if (data.failed === 0) {
+                    showNotification(`Import termine ! ${data.total_entries} entrees importees.`, 'success');
+                } else {
+                    showNotification(`Import termine avec ${data.failed} erreur(s).`, 'warning');
+                }
+                break;
+        }
+    }
+};
+
+// Initialize Export Time Reports and Import Time Reports when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     exportTimeReports.init();
+    importTimeReports.init();
 });

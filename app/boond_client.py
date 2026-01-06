@@ -1380,6 +1380,71 @@ class BoondClient:
                 logger.error(f"Failed to get time-report {time_report_id}: {e}")
                 return False, None, str(e)
 
+    async def create_time_report(
+        self,
+        resource_id: str,
+        term: str,
+        regular_times: list[dict[str, Any]] | None = None,
+        exceptional_times: list[dict[str, Any]] | None = None,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create a time-report via POST /times-reports.
+
+        Args:
+            resource_id: The resource ID
+            term: The term (YYYY-MM format)
+            regular_times: List of regular time entries
+            exceptional_times: List of exceptional time entries
+
+        Returns: (success, time_report_id, error_message)
+        """
+        attributes: dict[str, Any] = {
+            "term": term,
+        }
+
+        if regular_times:
+            attributes["regularTimes"] = regular_times
+        if exceptional_times:
+            attributes["exceptionalTimes"] = exceptional_times
+
+        payload = {
+            "data": {
+                "type": "times-report",
+                "attributes": attributes,
+                "relationships": {
+                    "dependsOn": {
+                        "data": {"type": "resource", "id": str(resource_id)}
+                    }
+                }
+            }
+        }
+
+        logger.info(f"Creating time-report for resource {resource_id}, term {term}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/times-reports",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    time_report_id = data.get("data", {}).get("id")
+                    logger.info(f"Created time-report {time_report_id} for resource {resource_id}")
+                    return True, time_report_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to create time-report: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to create time-report: {e}")
+                return False, None, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

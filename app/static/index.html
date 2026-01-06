@@ -22,6 +22,7 @@
             <li><a href="#" class="tab-link" data-entity="resources">Resources</a></li>
             <li><a href="#" class="tab-link" data-entity="resource-contracts">Resource Contracts</a></li>
             <li><a href="#" class="tab-link" data-entity="export-time-reports">Export Time Reports</a></li>
+            <li><a href="#" class="tab-link" data-entity="import-time-reports">Import Time Reports</a></li>
         </ul>
     </nav>
 
@@ -101,6 +102,69 @@
                         </table>
                     </div>
                     <button class="btn btn-primary" id="export-tr-download-btn">Telecharger le CSV</button>
+                </section>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-import-time-reports">
+            <div class="entity-container" data-entity="import-time-reports">
+                <!-- Upload Section -->
+                <section class="section upload-section">
+                    <h2>1. Fichier CSV des time-reports</h2>
+                    <p class="section-note">Le fichier doit avoir le format d'export: <code>type, term, startDate, resource_id, project_id, delivery_id, workUnitType_reference, duration...</code></p>
+                    <div class="dropzone" id="import-tr-dropzone" tabindex="0">
+                        <div class="dropzone-content">
+                            <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p>Glissez-deposez votre fichier CSV ici</p>
+                            <p class="dropzone-or">ou</p>
+                            <button class="btn btn-secondary" id="import-tr-browse-btn">Parcourir</button>
+                        </div>
+                        <input type="file" id="import-tr-file-input" accept=".csv" hidden>
+                    </div>
+                    <div class="selected-file hidden" id="import-tr-selected-file">
+                        <span class="file-name" id="import-tr-file-name"></span>
+                        <button class="btn btn-text" id="import-tr-clear-btn">X</button>
+                    </div>
+                </section>
+
+                <!-- Preview Section -->
+                <section class="section preview-section hidden" id="import-tr-preview-section">
+                    <h2>Previsualisation</h2>
+                    <p class="section-note"><span id="import-tr-row-count">0</span> entree(s) - <span id="import-tr-report-count">0</span> time-report(s) a creer</p>
+                    <div class="table-container">
+                        <table class="preview-table" id="import-tr-preview-table">
+                            <thead></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Actions Section -->
+                <section class="section actions-section">
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="import-tr-start-btn" disabled>Lancer l'import</button>
+                    </div>
+                    <div class="progress-container hidden" id="import-tr-progress">
+                        <div class="progress-header">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="import-tr-progress-fill"></div>
+                            </div>
+                            <span class="progress-text" id="import-tr-progress-text">0%</span>
+                        </div>
+                        <div class="progress-action" id="import-tr-progress-action"></div>
+                        <div class="action-log" id="import-tr-action-log"></div>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="section results-section hidden" id="import-tr-results">
+                    <h2>Resultats</h2>
+                    <div class="results-summary">
+                        <span class="success-count" id="import-tr-success-count"></span>
+                        <span class="failed-count" id="import-tr-failed-count"></span>
+                        <span id="import-tr-entries-count"></span>
+                    </div>
                 </section>
             </div>
         </div>
