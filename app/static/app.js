@@ -821,7 +821,7 @@ async function deleteContracts(entity, container) {
 }
 
 /**
- * Update positionings for deliveries
+ * Update positionings for deliveries with SSE progress
  */
 async function updatePositionings(entity, container) {
     const file = entityData[entity].file;
@@ -837,6 +837,19 @@ async function updatePositionings(entity, container) {
     updateBtn.disabled = true;
     updateBtn.innerHTML = '<span class="spinner"></span>Mise à jour...';
 
+    // Show progress container
+    const progressContainer = container.querySelector('.progress-container');
+    const progressFill = container.querySelector('.progress-fill');
+    const progressText = container.querySelector('.progress-text');
+    const progressAction = container.querySelector('.progress-action');
+    const actionLog = container.querySelector('.action-log');
+
+    progressContainer.classList.remove('hidden');
+    progressFill.style.width = '0%';
+    progressText.textContent = '0%';
+    progressAction.textContent = 'Démarrage...';
+    actionLog.innerHTML = '';
+
     try {
         const csvContent = createCSVFromData(entity);
         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -848,23 +861,64 @@ async function updatePositionings(entity, container) {
             body: formData
         });
 
-        const result = await response.json();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        // Store results
-        entityData[entity].importResults = result;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        // Show results
-        displayResults(entity, container, result);
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop(); // Keep incomplete line in buffer
 
-        if (result.failed === 0) {
-            showNotification(`${result.success} positionnement(s) mis à jour avec succès`, 'success');
-        } else {
-            showNotification(`${result.success} succès, ${result.failed} erreur(s)`, 'warning');
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = JSON.parse(line.slice(6));
+
+                    if (data.type === 'progress') {
+                        progressFill.style.width = `${data.percent}%`;
+                        progressText.textContent = `${data.percent}%`;
+                        progressAction.textContent = data.action;
+                    } else if (data.type === 'action') {
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        logEntry.textContent = `> ${data.message}`;
+                        actionLog.appendChild(logEntry);
+                        actionLog.scrollTop = actionLog.scrollHeight;
+                    } else if (data.type === 'complete') {
+                        // Final result
+                        progressFill.style.width = '100%';
+                        progressText.textContent = '100%';
+                        progressAction.textContent = 'Terminé!';
+
+                        // Store results
+                        const result = {
+                            total: data.total,
+                            success: data.success,
+                            failed: data.failed,
+                            results: data.results
+                        };
+                        entityData[entity].importResults = result;
+
+                        // Show results
+                        displayResults(entity, container, result);
+
+                        if (data.failed === 0) {
+                            showNotification(`${data.success} positionnement(s) mis à jour avec succès`, 'success');
+                        } else {
+                            showNotification(`${data.success} succès, ${data.failed} erreur(s)`, 'warning');
+                        }
+                    }
+                }
+            }
         }
 
     } catch (error) {
         console.error('Error updating positionings:', error);
         showNotification('Erreur lors de la mise à jour des positionnements', 'error');
+        progressAction.textContent = 'Erreur!';
     } finally {
         updateBtn.disabled = false;
         updateBtn.textContent = 'Actualiser les positionnements';

@@ -364,9 +364,15 @@ td input.error {
 /* Progress */
 .progress-container {
     display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.progress-header {
+    display: flex;
     align-items: center;
     gap: 1rem;
-    margin-top: 1rem;
 }
 
 .progress-bar {
@@ -388,6 +394,40 @@ td input.error {
     font-size: 0.875rem;
     font-weight: 500;
     min-width: 3rem;
+}
+
+.progress-action {
+    font-size: 0.875rem;
+    color: var(--text-light);
+    padding: 0.25rem 0;
+}
+
+.action-log {
+    max-height: 150px;
+    overflow-y: auto;
+    background-color: #1f2937;
+    color: #10b981;
+    font-family: monospace;
+    font-size: 0.75rem;
+    padding: 0.5rem;
+    border-radius: var(--radius);
+    margin-top: 0.5rem;
+}
+
+.action-log:empty {
+    display: none;
+}
+
+.action-log .log-entry {
+    padding: 0.125rem 0;
+}
+
+.action-log .log-entry.error {
+    color: var(--error-color);
+}
+
+.action-log .log-entry.success {
+    color: var(--success-color);
 }
 
 /* Results */

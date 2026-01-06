@@ -1,11 +1,13 @@
 """Router for Deliveries entity with contract end date update logic."""
 
+import asyncio
+import json
 import logging
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 
 from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from app.boond_client import get_boond_client
 from app.csv_parser import (
@@ -346,16 +348,10 @@ def _find_latest_contract(contracts: list[dict]) -> dict | None:
 
 
 @router.post("/update-positionings")
-async def update_positionings(file: UploadFile = File(...)) -> ImportResponse:
+async def update_positionings(file: UploadFile = File(...)) -> StreamingResponse:
     """
-    Update positioning start dates based on first delivery per project/resource.
-
-    For each (project_id, resource_id) pair in the CSV:
-    1. Find the first delivery (by start_date)
-    2. Get the project's opportunity
-    3. Get the resource's positionings
-    4. Find the positioning matching the opportunity
-    5. Update the positioning's startDate
+    Update positioning updateDate based on first delivery per project/resource.
+    Returns Server-Sent Events for real-time progress.
     """
     content = await file.read()
     try:
@@ -364,11 +360,6 @@ async def update_positionings(file: UploadFile = File(...)) -> ImportResponse:
         text_content = content.decode("latin-1")
 
     _, rows = parse_csv(text_content)
-
-    client = get_boond_client()
-    results: list[ImportResult] = []
-    success_count = 0
-    failed_count = 0
 
     # Group by (project_id, resource_id)
     deliveries_by_pair: dict[tuple[str, str], list[dict]] = defaultdict(list)
@@ -382,151 +373,182 @@ async def update_positionings(file: UploadFile = File(...)) -> ImportResponse:
                 "original_data": row,
             })
 
-    # Process each (project_id, resource_id) pair
-    processed_pairs = set()
-    for (project_id, resource_id), deliveries in deliveries_by_pair.items():
-        if (project_id, resource_id) in processed_pairs:
-            continue
-        processed_pairs.add((project_id, resource_id))
+    async def generate_events():
+        client = get_boond_client()
+        results: list[dict] = []
+        success_count = 0
+        failed_count = 0
+        total_pairs = len(deliveries_by_pair)
+        current = 0
 
-        # Find first delivery by start_date
-        first_delivery = _find_first_delivery(deliveries)
-        if not first_delivery:
-            continue
+        for (project_id, resource_id), deliveries in deliveries_by_pair.items():
+            current += 1
 
-        start_date_str = first_delivery.get("start_date")
-        if not start_date_str:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="error",
-                id=None,
-                message="Pas de start_date",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
-            continue
+            # Find first delivery by start_date
+            first_delivery = _find_first_delivery(deliveries)
+            if not first_delivery:
+                continue
 
-        # Parse and format start_date
-        try:
-            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        except ValueError:
-            try:
-                start_date = datetime.strptime(start_date_str, "%d/%m/%Y").date()
-            except ValueError:
-                results.append(ImportResult(
-                    row=first_delivery["row_num"],
-                    status="error",
-                    id=None,
-                    message=f"Format de date invalide: {start_date_str}",
-                    original_data=first_delivery.get("original_data"),
-                ))
+            start_date_str = first_delivery.get("start_date")
+
+            # Send progress event
+            progress_event = {
+                "type": "progress",
+                "current": current,
+                "total": total_pairs,
+                "action": f"Traitement projet {project_id}, ressource {resource_id}...",
+                "percent": int((current / total_pairs) * 100),
+            }
+            yield f"data: {json.dumps(progress_event)}\n\n"
+
+            if not start_date_str:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "error",
+                    "id": None,
+                    "message": "Pas de start_date",
+                })
                 failed_count += 1
                 continue
 
-        start_date_formatted = start_date.strftime("%Y-%m-%d")
+            # Parse and format start_date
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                try:
+                    start_date = datetime.strptime(start_date_str, "%d/%m/%Y").date()
+                except ValueError:
+                    results.append({
+                        "row": first_delivery["row_num"],
+                        "status": "error",
+                        "id": None,
+                        "message": f"Format de date invalide: {start_date_str}",
+                    })
+                    failed_count += 1
+                    continue
 
-        # Get project's opportunity
-        success, project_data, error = await client.get_project(project_id)
-        if not success or not project_data:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="error",
-                id=None,
-                message=f"Impossible de récupérer le projet {project_id}: {error}",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
-            continue
+            # Format as datetime with timezone (e.g., 2026-01-05T12:23:25+0100)
+            paris_tz = timezone(timedelta(hours=1))
+            update_datetime = datetime.combine(start_date, datetime.min.time()).replace(tzinfo=paris_tz)
+            update_date_formatted = update_datetime.strftime("%Y-%m-%dT%H:%M:%S%z")
 
-        # Extract opportunity_id from project relationships
-        opportunity_id = (
-            project_data.get("relationships", {})
-            .get("opportunity", {})
-            .get("data", {})
-            .get("id")
-        )
+            # Send action event
+            yield f"data: {json.dumps({'type': 'action', 'message': f'GET /projects/{project_id}'})}\n\n"
 
-        if not opportunity_id:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="error",
-                id=None,
-                message=f"Pas d'opportunité liée au projet {project_id}",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
-            continue
+            # Get project's opportunity
+            success, project_data, error = await client.get_project(project_id)
+            if not success or not project_data:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "error",
+                    "id": None,
+                    "message": f"Impossible de récupérer le projet {project_id}: {error}",
+                })
+                failed_count += 1
+                continue
 
-        # Get resource's positionings
-        success, positionings, error = await client.get_resource_positionings(resource_id)
-        if not success:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="error",
-                id=None,
-                message=f"Impossible de récupérer les positionnements: {error}",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
-            continue
-
-        # Find positioning matching the opportunity
-        matching_positioning = None
-        for pos in positionings:
-            pos_opportunity_id = (
-                pos.get("relationships", {})
+            # Extract opportunity_id from project relationships
+            opportunity_id = (
+                project_data.get("relationships", {})
                 .get("opportunity", {})
                 .get("data", {})
                 .get("id")
             )
-            if pos_opportunity_id == opportunity_id:
-                matching_positioning = pos
-                break
 
-        if not matching_positioning:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="warning",
-                id=None,
-                message=f"Pas de positionnement trouvé pour l'opportunité {opportunity_id}",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
-            continue
+            if not opportunity_id:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "error",
+                    "id": None,
+                    "message": f"Pas d'opportunité liée au projet {project_id}",
+                })
+                failed_count += 1
+                continue
 
-        positioning_id = matching_positioning.get("id")
+            # Send action event
+            yield f"data: {json.dumps({'type': 'action', 'message': f'GET /resources/{resource_id}/positionings'})}\n\n"
 
-        # Update the positioning
-        success, error = await client.update_positioning(positioning_id, start_date_formatted)
+            # Get resource's positionings
+            success, positionings, error = await client.get_resource_positionings(resource_id)
+            if not success:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "error",
+                    "id": None,
+                    "message": f"Impossible de récupérer les positionnements: {error}",
+                })
+                failed_count += 1
+                continue
 
-        if success:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="success",
-                id=positioning_id,
-                message=f"Positionnement {positioning_id} mis à jour (startDate={start_date_formatted})",
-                original_data=first_delivery.get("original_data"),
-            ))
-            success_count += 1
-            logger.info(
-                f"Updated positioning {positioning_id} for project {project_id}, "
-                f"resource {resource_id} with startDate={start_date_formatted}"
-            )
-        else:
-            results.append(ImportResult(
-                row=first_delivery["row_num"],
-                status="error",
-                id=None,
-                message=f"Échec mise à jour positionnement: {error}",
-                original_data=first_delivery.get("original_data"),
-            ))
-            failed_count += 1
+            # Find positioning matching the opportunity
+            matching_positioning = None
+            for pos in positionings:
+                pos_opportunity_id = (
+                    pos.get("relationships", {})
+                    .get("opportunity", {})
+                    .get("data", {})
+                    .get("id")
+                )
+                if pos_opportunity_id == opportunity_id:
+                    matching_positioning = pos
+                    break
 
-    return ImportResponse(
-        total=len(processed_pairs),
-        success=success_count,
-        failed=failed_count,
-        results=results,
+            if not matching_positioning:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "warning",
+                    "id": None,
+                    "message": f"Pas de positionnement trouvé pour l'opportunité {opportunity_id}",
+                })
+                failed_count += 1
+                continue
+
+            positioning_id = matching_positioning.get("id")
+
+            # Send action event
+            yield f"data: {json.dumps({'type': 'action', 'message': f'PUT /positionings/{positioning_id}'})}\n\n"
+
+            # Update the positioning
+            success, error = await client.update_positioning(positioning_id, update_date_formatted)
+
+            if success:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "success",
+                    "id": positioning_id,
+                    "message": f"Positionnement {positioning_id} mis à jour (updateDate={update_date_formatted})",
+                })
+                success_count += 1
+                logger.info(
+                    f"Updated positioning {positioning_id} for project {project_id}, "
+                    f"resource {resource_id} with updateDate={update_date_formatted}"
+                )
+            else:
+                results.append({
+                    "row": first_delivery["row_num"],
+                    "status": "error",
+                    "id": None,
+                    "message": f"Échec mise à jour positionnement: {error}",
+                })
+                failed_count += 1
+
+        # Send final result
+        final_result = {
+            "type": "complete",
+            "total": total_pairs,
+            "success": success_count,
+            "failed": failed_count,
+            "results": results,
+        }
+        yield f"data: {json.dumps(final_result)}\n\n"
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
     )
 
 
