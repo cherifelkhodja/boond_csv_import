@@ -434,7 +434,8 @@ async def import_provider_invoices(
                 )
 
                 if pay_success:
-                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Payment ajoute (purchase: {row[\"purchase_id\"]})'})}\n\n"
+                    purchase_id_val = row["purchase_id"]
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Payment ajoute (purchase: {purchase_id_val})'})}\n\n"
                     payments_added += 1
                     result["payment_status"] = "added"
                 else:
@@ -449,7 +450,8 @@ async def import_provider_invoices(
             # Step 3: Attach document if file exists
             if row["file_status"] == "found":
                 file_path = PROVIDER_INVOICES_FOLDER / row["invoice_file"]
-                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /documents ({row[\"invoice_file\"]})'})}\n\n"
+                invoice_file_name = row["invoice_file"]
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /documents ({invoice_file_name})'})}\n\n"
 
                 doc_success, doc_error = await client.upload_document_to_provider_invoice(
                     invoice_id=invoice_id,
@@ -466,7 +468,8 @@ async def import_provider_invoices(
             elif row["file_status"] == "na":
                 result["document_status"] = "na"
             else:
-                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Fichier non trouve: {row[\"invoice_file\"]}'})}\n\n"
+                missing_file_name = row["invoice_file"]
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Fichier non trouve: {missing_file_name}'})}\n\n"
                 without_document += 1
                 result["document_status"] = "file_missing"
 
