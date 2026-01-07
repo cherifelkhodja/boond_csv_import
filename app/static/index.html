@@ -415,6 +415,17 @@
         </div>
     </template>
 
+    <footer>
+        <p>Version du <span id="build-date"></span></p>
+    </footer>
+
     <script src="/static/app.js"></script>
+    <script>
+        document.getElementById('build-date').textContent = new Date().toLocaleDateString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+    </script>
 </body>
 </html>
