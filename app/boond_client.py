@@ -1481,6 +1481,198 @@ class BoondClient:
                 logger.error(f"Failed to validate time-report {time_report_id}: {e}")
                 return False, str(e)
 
+    async def create_provider_invoice(
+        self,
+        resource_id: str,
+        reference: str,
+        invoice_date: str,
+        start_date: str,
+        end_date: str,
+        amount_excluding_tax: float,
+        amount_including_tax: float,
+        state: int = 2,
+    ) -> tuple[bool, str | None, str | None]:
+        """
+        Create a provider invoice via POST /provider-invoices.
+
+        Args:
+            resource_id: The resource ID
+            reference: Invoice reference
+            invoice_date: Invoice date (YYYY-MM-DD)
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            amount_excluding_tax: Amount excluding tax
+            amount_including_tax: Amount including tax
+            state: Invoice state (default: 2)
+
+        Returns: (success, provider_invoice_id, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "providerinvoice",
+                "attributes": {
+                    "state": state,
+                    "amountExcludingTax": amount_excluding_tax,
+                    "amountIncludingTax": amount_including_tax,
+                    "invoiceDate": invoice_date,
+                    "startDate": start_date,
+                    "endDate": end_date,
+                    "reference": reference,
+                },
+                "relationships": {
+                    "resource": {
+                        "data": {"type": "resource", "id": str(resource_id)}
+                    }
+                }
+            }
+        }
+
+        logger.info(f"Creating provider invoice for resource {resource_id}, ref {reference}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/provider-invoices",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201):
+                    data = response.json()
+                    invoice_id = data.get("data", {}).get("id")
+                    logger.info(f"Created provider invoice {invoice_id}")
+                    return True, invoice_id, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to create provider invoice: {error_msg}")
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to create provider invoice: {e}")
+                return False, None, str(e)
+
+    async def update_provider_invoice_payment(
+        self,
+        invoice_id: str,
+        resource_id: str,
+        purchase_id: str,
+        amount_excluding_tax: float,
+        amount_including_tax: float,
+        payment_state: int = 2,
+        tax_rate: float = 20.0,
+    ) -> tuple[bool, str | None]:
+        """
+        Update a provider invoice to add payment via PUT /provider-invoices/{id}.
+
+        Args:
+            invoice_id: The provider invoice ID
+            resource_id: The resource ID
+            purchase_id: The purchase ID to link
+            amount_excluding_tax: Amount excluding tax
+            amount_including_tax: Amount including tax
+            payment_state: Payment state (1=unpaid, 2=paid)
+            tax_rate: Tax rate (default: 20)
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "providerinvoice",
+                "attributes": {
+                    "state": 2,
+                    "payments": [
+                        {
+                            "state": payment_state,
+                            "taxRate": tax_rate,
+                            "amountIncludingTax": amount_including_tax,
+                            "amountExcludingTax": amount_excluding_tax,
+                            "purchase": {
+                                "id": str(purchase_id)
+                            }
+                        }
+                    ]
+                },
+                "relationships": {
+                    "resource": {
+                        "data": {"type": "resource", "id": str(resource_id)}
+                    }
+                }
+            }
+        }
+
+        logger.info(f"Adding payment to provider invoice {invoice_id}, purchase {purchase_id}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/provider-invoices/{invoice_id}",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201, 204):
+                    logger.info(f"Added payment to provider invoice {invoice_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to add payment to provider invoice {invoice_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to add payment to provider invoice {invoice_id}: {e}")
+                return False, str(e)
+
+    async def upload_document_to_provider_invoice(
+        self,
+        invoice_id: str,
+        file_path: Path,
+    ) -> tuple[bool, str | None]:
+        """
+        Upload a document to a provider invoice via POST /documents.
+
+        Args:
+            invoice_id: The provider invoice ID
+            file_path: Path to the document file
+
+        Returns: (success, error_message)
+        """
+        if not file_path.exists():
+            return False, f"File not found: {file_path}"
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                with open(file_path, "rb") as f:
+                    files = {"file": (file_path.name, f, "application/pdf")}
+                    data = {
+                        "parentType": "providerinvoice",
+                        "parentId": str(invoice_id),
+                    }
+
+                    response = await client.post(
+                        f"{self.base_url}/documents",
+                        files=files,
+                        data=data,
+                        auth=self.auth,
+                        headers={"Accept": "application/json"},
+                    )
+
+                if response.status_code in (200, 201):
+                    logger.info(f"Uploaded document {file_path.name} to provider invoice {invoice_id}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    logger.warning(f"Document upload API response: {error_data}")
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to upload document to provider invoice: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

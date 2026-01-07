@@ -1764,8 +1764,418 @@ const importTimeReports = {
     }
 };
 
-// Initialize Export Time Reports and Import Time Reports when DOM is ready
+/**
+ * Provider Invoices functionality
+ */
+const providerInvoices = {
+    invoicesFile: null,
+    purchasesFile: null,
+    previewData: null,
+    importResults: null,
+
+    init() {
+        const invoicesDropzone = document.getElementById('pi-invoices-dropzone');
+        const invoicesFileInput = document.getElementById('pi-invoices-file-input');
+        const invoicesBrowseBtn = document.getElementById('pi-invoices-browse-btn');
+        const invoicesClearBtn = document.getElementById('pi-invoices-clear-btn');
+
+        const purchasesDropzone = document.getElementById('pi-purchases-dropzone');
+        const purchasesFileInput = document.getElementById('pi-purchases-file-input');
+        const purchasesBrowseBtn = document.getElementById('pi-purchases-browse-btn');
+        const purchasesClearBtn = document.getElementById('pi-purchases-clear-btn');
+
+        const previewBtn = document.getElementById('pi-preview-btn');
+        const importBtn = document.getElementById('pi-import-btn');
+        const downloadCsvBtn = document.getElementById('pi-download-csv-btn');
+
+        const filterStatus = document.getElementById('pi-filter-status');
+        const filterSearch = document.getElementById('pi-filter-search');
+
+        if (!invoicesDropzone) return;
+
+        // Invoices file handlers
+        this.setupDropzone(invoicesDropzone, invoicesFileInput, invoicesBrowseBtn, (file) => {
+            this.invoicesFile = file;
+            document.getElementById('pi-invoices-file-name').textContent = file.name;
+            document.getElementById('pi-invoices-selected-file').classList.remove('hidden');
+            this.updateButtons();
+        });
+
+        invoicesClearBtn.addEventListener('click', () => {
+            this.invoicesFile = null;
+            document.getElementById('pi-invoices-file-input').value = '';
+            document.getElementById('pi-invoices-selected-file').classList.add('hidden');
+            this.updateButtons();
+        });
+
+        // Purchases file handlers
+        this.setupDropzone(purchasesDropzone, purchasesFileInput, purchasesBrowseBtn, (file) => {
+            this.purchasesFile = file;
+            document.getElementById('pi-purchases-file-name').textContent = file.name;
+            document.getElementById('pi-purchases-selected-file').classList.remove('hidden');
+            this.parsePurchasesCount(file);
+        });
+
+        purchasesClearBtn.addEventListener('click', () => {
+            this.purchasesFile = null;
+            document.getElementById('pi-purchases-file-input').value = '';
+            document.getElementById('pi-purchases-selected-file').classList.add('hidden');
+            document.getElementById('pi-purchases-count').classList.add('hidden');
+        });
+
+        // Action buttons
+        previewBtn.addEventListener('click', () => this.preview());
+        importBtn.addEventListener('click', () => this.startImport());
+        downloadCsvBtn.addEventListener('click', () => this.downloadResultsCSV());
+
+        // Filters
+        filterStatus.addEventListener('change', () => this.applyFilters());
+        filterSearch.addEventListener('input', () => this.applyFilters());
+    },
+
+    setupDropzone(dropzone, fileInput, browseBtn, onFile) {
+        browseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dropzone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0 && e.dataTransfer.files[0].name.endsWith('.csv')) {
+                onFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                onFile(fileInput.files[0]);
+            }
+        });
+    },
+
+    async parsePurchasesCount(file) {
+        const content = await file.text();
+        const lines = content.split('\n').filter(l => l.trim());
+        const count = Math.max(0, lines.length - 1);
+        const countEl = document.getElementById('pi-purchases-count');
+        countEl.textContent = `${count} achats charges`;
+        countEl.classList.remove('hidden');
+    },
+
+    updateButtons() {
+        const hasInvoices = this.invoicesFile !== null;
+        document.getElementById('pi-preview-btn').disabled = !hasInvoices;
+        document.getElementById('pi-import-btn').disabled = !this.previewData || this.previewData.rows.length === 0;
+    },
+
+    async preview() {
+        const previewBtn = document.getElementById('pi-preview-btn');
+        previewBtn.disabled = true;
+        previewBtn.innerHTML = '<span class="spinner"></span>Chargement...';
+
+        try {
+            const formData = new FormData();
+            formData.append('invoices_file', this.invoicesFile);
+            if (this.purchasesFile) {
+                formData.append('purchases_file', this.purchasesFile);
+            }
+
+            const response = await fetch('/api/import-provider-invoices/preview', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+            }
+
+            this.previewData = await response.json();
+            this.renderPreview();
+            this.updateButtons();
+
+            showNotification(`${this.previewData.rows.length} factures chargees`, 'success');
+        } catch (error) {
+            console.error('Preview error:', error);
+            showNotification('Erreur lors de la previsualisation', 'error');
+        } finally {
+            previewBtn.disabled = false;
+            previewBtn.textContent = 'Previsualiser';
+        }
+    },
+
+    renderPreview() {
+        if (!this.previewData) return;
+
+        const previewSection = document.getElementById('pi-preview-section');
+        const tbody = document.getElementById('pi-preview-table').querySelector('tbody');
+        const stats = this.previewData.stats;
+
+        // Update stats
+        document.getElementById('pi-stat-total').textContent = stats.total;
+        document.getElementById('pi-stat-ready').textContent = stats.ready;
+        document.getElementById('pi-stat-partial').textContent = stats.partial;
+        document.getElementById('pi-stat-error').textContent = stats.error;
+        document.getElementById('pi-stat-payment').textContent = stats.with_payment;
+        document.getElementById('pi-stat-document').textContent = stats.with_document;
+
+        // Render rows
+        this.renderTableRows(this.previewData.rows);
+
+        previewSection.classList.remove('hidden');
+    },
+
+    renderTableRows(rows) {
+        const tbody = document.getElementById('pi-preview-table').querySelector('tbody');
+        tbody.innerHTML = '';
+
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = `row-${row.status}`;
+
+            // Status icons
+            const statusIcon = row.status === 'ready' ? '🟢' : (row.status === 'partial' ? '🟡' : '🔴');
+            const fileStatusIcon = row.file_status === 'found' ? '✅' : (row.file_status === 'na' ? '➖' : '⚠️');
+            const purchaseDisplay = row.purchase_id || '⚠️ Non trouve';
+
+            tr.innerHTML = `
+                <td>${row.row_num}</td>
+                <td>${escapeHtml(row.resource_name)}</td>
+                <td>${row.resource_id}</td>
+                <td>${escapeHtml(row.reference)}</td>
+                <td>${row.invoice_date}</td>
+                <td>${row.start_date}</td>
+                <td>${row.end_date}</td>
+                <td>${row.amount_excluding_tax.toFixed(2)}</td>
+                <td>${row.amount_including_tax.toFixed(2)}</td>
+                <td class="${row.purchase_id ? '' : 'warning'}">${purchaseDisplay}</td>
+                <td>${row.payment_state}</td>
+                <td>${escapeHtml(row.invoice_file)}</td>
+                <td>${fileStatusIcon}</td>
+                <td>${statusIcon}</td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+    },
+
+    applyFilters() {
+        if (!this.previewData) return;
+
+        const statusFilter = document.getElementById('pi-filter-status').value;
+        const searchFilter = document.getElementById('pi-filter-search').value.toLowerCase();
+
+        let filteredRows = this.previewData.rows;
+
+        if (statusFilter !== 'all') {
+            filteredRows = filteredRows.filter(r => r.status === statusFilter);
+        }
+
+        if (searchFilter) {
+            filteredRows = filteredRows.filter(r =>
+                r.resource_name.toLowerCase().includes(searchFilter)
+            );
+        }
+
+        this.renderTableRows(filteredRows);
+    },
+
+    async startImport() {
+        if (!this.previewData || this.previewData.rows.length === 0) {
+            showNotification('Veuillez d\'abord previsualiser les donnees', 'error');
+            return;
+        }
+
+        const importBtn = document.getElementById('pi-import-btn');
+        const progressContainer = document.getElementById('pi-progress');
+        const progressFill = document.getElementById('pi-progress-fill');
+        const progressText = document.getElementById('pi-progress-text');
+        const progressAction = document.getElementById('pi-progress-action');
+        const actionLog = document.getElementById('pi-action-log');
+        const resultsSection = document.getElementById('pi-results');
+
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<span class="spinner"></span>Import en cours...';
+        progressContainer.classList.remove('hidden');
+        resultsSection.classList.add('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        progressAction.textContent = '';
+        actionLog.innerHTML = '';
+
+        try {
+            const formData = new FormData();
+            formData.append('invoices_file', this.invoicesFile);
+            if (this.purchasesFile) {
+                formData.append('purchases_file', this.purchasesFile);
+            }
+
+            const response = await fetch('/api/import-provider-invoices/import', {
+                method: 'POST',
+                body: formData
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const messages = buffer.split('\n\n');
+                buffer = messages.pop() || '';
+
+                for (const message of messages) {
+                    const lines = message.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                this.handleSSEEvent(data);
+                            } catch (e) {
+                                console.error('Error parsing SSE:', e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process remaining buffer
+            if (buffer.trim()) {
+                const lines = buffer.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            this.handleSSEEvent(data);
+                        } catch (e) {
+                            console.error('Error parsing final SSE:', e);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showNotification('Erreur lors de l\'import', 'error');
+        } finally {
+            importBtn.disabled = false;
+            importBtn.textContent = 'Importer';
+        }
+    },
+
+    handleSSEEvent(data) {
+        const progressFill = document.getElementById('pi-progress-fill');
+        const progressText = document.getElementById('pi-progress-text');
+        const progressAction = document.getElementById('pi-progress-action');
+        const actionLog = document.getElementById('pi-action-log');
+        const resultsSection = document.getElementById('pi-results');
+
+        switch (data.type) {
+            case 'progress':
+                progressFill.style.width = `${data.percent}%`;
+                progressText.textContent = `${data.percent}% (${data.current}/${data.total})`;
+                progressAction.textContent = data.action;
+                break;
+
+            case 'action':
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                if (data.message.includes('ERROR')) {
+                    logEntry.classList.add('error');
+                } else if (data.message.includes('WARN')) {
+                    logEntry.classList.add('warning');
+                } else if (data.message.includes('OK')) {
+                    logEntry.classList.add('success');
+                }
+                logEntry.textContent = data.message;
+                actionLog.appendChild(logEntry);
+                actionLog.scrollTop = actionLog.scrollHeight;
+                break;
+
+            case 'complete':
+                progressFill.style.width = '100%';
+                progressText.textContent = '100%';
+
+                // Store results for CSV export
+                this.importResults = data;
+
+                // Update result stats
+                document.getElementById('pi-res-created').textContent = data.stats.invoices_created;
+                document.getElementById('pi-res-payments').textContent = data.stats.payments_added;
+                document.getElementById('pi-res-documents').textContent = data.stats.documents_attached;
+                document.getElementById('pi-res-no-purchase').textContent = data.stats.without_purchase;
+                document.getElementById('pi-res-no-document').textContent = data.stats.without_document;
+                document.getElementById('pi-res-errors').textContent = data.stats.errors;
+
+                resultsSection.classList.remove('hidden');
+
+                if (data.stats.errors === 0) {
+                    showNotification(`Import termine ! ${data.stats.invoices_created} factures creees.`, 'success');
+                } else {
+                    showNotification(`Import termine avec ${data.stats.errors} erreur(s).`, 'warning');
+                }
+                break;
+        }
+    },
+
+    downloadResultsCSV() {
+        if (!this.importResults || !this.importResults.results) {
+            showNotification('Aucun resultat a exporter', 'error');
+            return;
+        }
+
+        const headers = [
+            'row_num', 'reference', 'resource_name', 'resource_id',
+            'invoice_id', 'invoice_status', 'payment_status', 'document_status', 'error'
+        ];
+
+        const csvLines = [headers.join(';')];
+        for (const r of this.importResults.results) {
+            const values = [
+                r.row_num,
+                r.reference,
+                r.resource_name,
+                r.resource_id,
+                r.invoice_id || '',
+                r.invoice_status,
+                r.payment_status,
+                r.document_status,
+                (r.error || '').replace(/;/g, ',')
+            ];
+            csvLines.push(values.join(';'));
+        }
+
+        const csvContent = csvLines.join('\n');
+        const today = new Date().toISOString().split('T')[0];
+        const filename = `provider_invoices_import_${today}.csv`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+    }
+};
+
+// Initialize Export Time Reports, Import Time Reports, and Provider Invoices when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     exportTimeReports.init();
     importTimeReports.init();
+    providerInvoices.init();
 });

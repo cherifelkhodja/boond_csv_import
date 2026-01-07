@@ -23,6 +23,7 @@
             <li><a href="#" class="tab-link" data-entity="resource-contracts">Resource Contracts</a></li>
             <li><a href="#" class="tab-link" data-entity="export-time-reports">Export Time Reports</a></li>
             <li><a href="#" class="tab-link" data-entity="import-time-reports">Import Time Reports</a></li>
+            <li><a href="#" class="tab-link" data-entity="provider-invoices">Provider Invoices</a></li>
         </ul>
     </nav>
 
@@ -187,6 +188,130 @@
                         <span class="failed-count" id="import-tr-failed-count"></span>
                         <span id="import-tr-entries-count"></span>
                     </div>
+                </section>
+            </div>
+        </div>
+        <div class="tab-content" id="tab-provider-invoices">
+            <div class="entity-container" data-entity="provider-invoices">
+                <!-- Invoices CSV Section -->
+                <section class="section upload-section">
+                    <h2>1. Fichier CSV des factures</h2>
+                    <p class="section-note">Colonnes: <code>invoice_year, invoice_month, invoiceDate, resource_name, resource_id, reference, amountExcludingTax, amountIncludingTax, invoice_paid, invoice_missing, invoice_file</code></p>
+                    <div class="dropzone" id="pi-invoices-dropzone" tabindex="0">
+                        <div class="dropzone-content">
+                            <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p>Glissez-deposez le CSV des factures</p>
+                            <p class="dropzone-or">ou</p>
+                            <button class="btn btn-secondary" id="pi-invoices-browse-btn">Parcourir</button>
+                        </div>
+                        <input type="file" id="pi-invoices-file-input" accept=".csv" hidden>
+                    </div>
+                    <div class="selected-file hidden" id="pi-invoices-selected-file">
+                        <span class="file-name" id="pi-invoices-file-name"></span>
+                        <button class="btn btn-text" id="pi-invoices-clear-btn">X</button>
+                    </div>
+                </section>
+
+                <!-- Purchases CSV Section -->
+                <section class="section upload-section">
+                    <h2>2. Fichier CSV des achats (optionnel)</h2>
+                    <p class="section-note">Colonnes: <code>purchase_id, resource_id, starDate, endDate</code> (dates au format JJ/MM/AAAA)</p>
+                    <div class="dropzone" id="pi-purchases-dropzone" tabindex="0">
+                        <div class="dropzone-content">
+                            <svg class="dropzone-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <p>Glissez-deposez le CSV des achats</p>
+                            <p class="dropzone-or">ou</p>
+                            <button class="btn btn-secondary" id="pi-purchases-browse-btn">Parcourir</button>
+                        </div>
+                        <input type="file" id="pi-purchases-file-input" accept=".csv" hidden>
+                    </div>
+                    <div class="selected-file hidden" id="pi-purchases-selected-file">
+                        <span class="file-name" id="pi-purchases-file-name"></span>
+                        <button class="btn btn-text" id="pi-purchases-clear-btn">X</button>
+                    </div>
+                    <p class="section-note hidden" id="pi-purchases-count"></p>
+                </section>
+
+                <!-- Preview Section -->
+                <section class="section preview-section hidden" id="pi-preview-section">
+                    <h2>Previsualisation</h2>
+                    <div class="pi-stats" id="pi-stats">
+                        <span class="pi-stat">Total: <strong id="pi-stat-total">0</strong></span>
+                        <span class="pi-stat status-ready">Pretes: <strong id="pi-stat-ready">0</strong></span>
+                        <span class="pi-stat status-partial">Partielles: <strong id="pi-stat-partial">0</strong></span>
+                        <span class="pi-stat status-error">Erreurs: <strong id="pi-stat-error">0</strong></span>
+                        <span class="pi-stat">Avec payment: <strong id="pi-stat-payment">0</strong></span>
+                        <span class="pi-stat">Avec document: <strong id="pi-stat-document">0</strong></span>
+                    </div>
+                    <div class="pi-filters">
+                        <label>Filtre: </label>
+                        <select id="pi-filter-status">
+                            <option value="all">Tout afficher</option>
+                            <option value="ready">Pretes</option>
+                            <option value="partial">Partielles</option>
+                            <option value="error">Erreurs</option>
+                        </select>
+                        <input type="text" id="pi-filter-search" placeholder="Rechercher par resource_name...">
+                    </div>
+                    <div class="table-container">
+                        <table class="preview-table" id="pi-preview-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>resource_name</th>
+                                    <th>resource_id</th>
+                                    <th>reference</th>
+                                    <th>invoiceDate</th>
+                                    <th>startDate</th>
+                                    <th>endDate</th>
+                                    <th>HT</th>
+                                    <th>TTC</th>
+                                    <th>purchase_id</th>
+                                    <th>payment_state</th>
+                                    <th>invoice_file</th>
+                                    <th>file_status</th>
+                                    <th>status</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Actions Section -->
+                <section class="section actions-section">
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="pi-preview-btn" disabled>Previsualiser</button>
+                        <button class="btn btn-primary" id="pi-import-btn" disabled>Importer</button>
+                    </div>
+                    <div class="progress-container hidden" id="pi-progress">
+                        <div class="progress-header">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="pi-progress-fill"></div>
+                            </div>
+                            <span class="progress-text" id="pi-progress-text">0%</span>
+                        </div>
+                        <div class="progress-action" id="pi-progress-action"></div>
+                        <div class="action-log" id="pi-action-log"></div>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="section results-section hidden" id="pi-results">
+                    <h2>Resultats</h2>
+                    <div class="results-summary" id="pi-results-summary">
+                        <span class="success-count">Factures creees: <strong id="pi-res-created">0</strong></span>
+                        <span class="success-count">Payments ajoutes: <strong id="pi-res-payments">0</strong></span>
+                        <span class="success-count">Documents attaches: <strong id="pi-res-documents">0</strong></span>
+                        <span class="warning-count">Sans purchase: <strong id="pi-res-no-purchase">0</strong></span>
+                        <span class="warning-count">Sans document: <strong id="pi-res-no-document">0</strong></span>
+                        <span class="failed-count">Erreurs: <strong id="pi-res-errors">0</strong></span>
+                    </div>
+                    <button class="btn btn-primary" id="pi-download-csv-btn">Telecharger le rapport CSV</button>
                 </section>
             </div>
         </div>
