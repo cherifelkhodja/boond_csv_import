@@ -1727,6 +1727,228 @@ class BoondClient:
                 logger.error(f"Failed to upload document to provider invoice: {e}")
                 return False, str(e)
 
+    async def get_agencies(self) -> tuple[bool, list[dict] | None, str | None]:
+        """
+        Get list of agencies via GET /agencies.
+
+        Returns: (success, agencies_list, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/agencies",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    agencies = []
+                    for item in data.get("data", []):
+                        agencies.append({
+                            "id": item.get("id"),
+                            "name": item.get("attributes", {}).get("name", ""),
+                        })
+                    return True, agencies, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get agencies: {e}")
+                return False, None, str(e)
+
+    async def get_provider_invoices_with_filters(
+        self,
+        agency_id: str | None = None,
+        invoice_date_from: str | None = None,
+        invoice_date_to: str | None = None,
+    ) -> tuple[bool, list[dict] | None, str | None]:
+        """
+        Get provider invoices with filters via GET /provider-invoices.
+
+        Args:
+            agency_id: Filter by agency ID
+            invoice_date_from: Filter invoiceDate >= (YYYY-MM-DD)
+            invoice_date_to: Filter invoiceDate <= (YYYY-MM-DD)
+
+        Returns: (success, invoices_list, error_message)
+        """
+        params = {}
+        if agency_id:
+            params["agency"] = agency_id
+        if invoice_date_from:
+            params["invoiceDateFrom"] = invoice_date_from
+        if invoice_date_to:
+            params["invoiceDateTo"] = invoice_date_to
+
+        all_invoices = []
+        page = 1
+        max_pages = 100  # Safety limit
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                while page <= max_pages:
+                    params["page"] = page
+                    response = await client.get(
+                        f"{self.base_url}/provider-invoices",
+                        params=params,
+                        auth=self.auth,
+                        headers=self._get_headers(),
+                    )
+
+                    if response.status_code != 200:
+                        error_data = response.json() if response.content else {}
+                        error_msg = self._extract_error_message(error_data, response.status_code)
+                        return False, None, error_msg
+
+                    data = response.json()
+                    items = data.get("data", [])
+                    included = data.get("included", [])
+
+                    # Build resource lookup from included
+                    resources_map = {}
+                    for inc in included:
+                        if inc.get("type") == "resource":
+                            res_id = inc.get("id")
+                            attrs = inc.get("attributes", {})
+                            resources_map[res_id] = {
+                                "firstName": attrs.get("firstName", ""),
+                                "lastName": attrs.get("lastName", ""),
+                            }
+
+                    for item in items:
+                        attrs = item.get("attributes", {})
+                        rels = item.get("relationships", {})
+                        resource_data = rels.get("resource", {}).get("data", {})
+                        resource_id = resource_data.get("id", "")
+                        resource_info = resources_map.get(resource_id, {})
+
+                        all_invoices.append({
+                            "id": item.get("id"),
+                            "reference": attrs.get("reference", ""),
+                            "invoiceDate": attrs.get("invoiceDate", ""),
+                            "startDate": attrs.get("startDate", ""),
+                            "endDate": attrs.get("endDate", ""),
+                            "amountExcludingTax": attrs.get("amountExcludingTax", 0),
+                            "amountIncludingTax": attrs.get("amountIncludingTax", 0),
+                            "state": attrs.get("state", 0),
+                            "resource_id": resource_id,
+                            "resource_name": f"{resource_info.get('lastName', '')} {resource_info.get('firstName', '')}".strip(),
+                        })
+
+                    # Check if there are more pages
+                    meta = data.get("meta", {})
+                    total_pages = meta.get("pagination", {}).get("pages", 1)
+                    if page >= total_pages:
+                        break
+                    page += 1
+
+                logger.info(f"Retrieved {len(all_invoices)} provider invoices")
+                return True, all_invoices, None
+
+            except Exception as e:
+                logger.error(f"Failed to get provider invoices: {e}")
+                return False, None, str(e)
+
+    async def get_activity_expenses(
+        self,
+        invoice_id: str,
+        start_date: str,
+        end_date: str,
+    ) -> tuple[bool, float, str | None]:
+        """
+        Get activity expenses for a provider invoice via GET /provider-invoices/{id}/activity-expenses.
+
+        Args:
+            invoice_id: The provider invoice ID
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+
+        Returns: (success, total_amount_excluding_tax, error_message)
+        """
+        params = {
+            "startDate": start_date,
+            "endDate": end_date,
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/provider-invoices/{invoice_id}/activity-expenses",
+                    params=params,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    meta = data.get("meta", {})
+                    total_amount = meta.get("totalAmountExcludingTax", 0) or 0
+                    return True, float(total_amount), None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to get activity expenses for invoice {invoice_id}: {error_msg}")
+                    return False, 0, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get activity expenses for invoice {invoice_id}: {e}")
+                return False, 0, str(e)
+
+    async def update_provider_invoice_state(
+        self,
+        invoice_id: str,
+        resource_id: str,
+        new_state: int,
+    ) -> tuple[bool, str | None]:
+        """
+        Update provider invoice state via PUT /provider-invoices/{id}.
+
+        Args:
+            invoice_id: The provider invoice ID
+            resource_id: The resource ID (required for update)
+            new_state: New state value
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "providerinvoice",
+                "attributes": {
+                    "state": new_state
+                },
+                "relationships": {
+                    "resource": {
+                        "data": {"type": "resource", "id": str(resource_id)}
+                    }
+                }
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/provider-invoices/{invoice_id}",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201, 204):
+                    logger.info(f"Updated provider invoice {invoice_id} state to {new_state}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update provider invoice {invoice_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update provider invoice {invoice_id}: {e}")
+                return False, str(e)
+
     def _extract_error_message(
         self,
         error_data: dict[str, Any],

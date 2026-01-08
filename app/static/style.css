@@ -850,3 +850,237 @@ footer {
     color: var(--text-light);
     font-size: 0.875rem;
 }
+
+/* ==================== */
+/* Ecarts Analysis Styles */
+/* ==================== */
+
+.ecarts-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.ecarts-filters .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.ecarts-filters label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-light);
+}
+
+.ecarts-filters select,
+.ecarts-filters input[type="date"] {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+    min-width: 150px;
+}
+
+.ecarts-filters select:focus,
+.ecarts-filters input[type="date"]:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Ecarts Stats */
+.ea-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.75rem;
+    background-color: var(--bg-light);
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+}
+
+.ea-stat {
+    font-size: 0.875rem;
+    color: var(--text-light);
+}
+
+.ea-stat strong {
+    color: var(--text-color);
+}
+
+.ea-stat.ecart-positif strong {
+    color: #dc2626;
+}
+
+.ea-stat.ecart-negatif strong {
+    color: #ea580c;
+}
+
+.ea-stat.ecart-zero strong {
+    color: #16a34a;
+}
+
+.ea-stat.sans-activite strong {
+    color: #6b7280;
+}
+
+/* Ecarts Table Filters */
+.ea-table-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.ea-table-filters select,
+.ea-table-filters input[type="text"] {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    font-size: 0.875rem;
+}
+
+.ea-table-filters input[type="text"] {
+    min-width: 250px;
+}
+
+/* Row styling for ecarts */
+.row-ecart-positif {
+    background-color: #fef2f2;
+}
+
+.row-ecart-positif:hover {
+    background-color: #fee2e2;
+}
+
+.row-ecart-positif td.ecart {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.row-ecart-negatif {
+    background-color: #fff7ed;
+}
+
+.row-ecart-negatif:hover {
+    background-color: #ffedd5;
+}
+
+.row-ecart-negatif td.ecart {
+    color: #ea580c;
+    font-weight: 600;
+}
+
+.row-ecart-zero {
+    background-color: #f0fdf4;
+}
+
+.row-ecart-zero:hover {
+    background-color: #dcfce7;
+}
+
+.row-ecart-zero td.ecart {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.row-sans-activite {
+    background-color: #f9fafb;
+}
+
+.row-sans-activite:hover {
+    background-color: #f3f4f6;
+}
+
+.row-sans-activite td {
+    color: #6b7280;
+}
+
+/* Amount cells */
+td.amount {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Report Box */
+.report-box {
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+}
+
+.report-box h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+    color: var(--text-color);
+}
+
+.report-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.report-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+}
+
+.report-row:nth-child(odd) {
+    background-color: #fff;
+}
+
+.report-row span {
+    color: var(--text-light);
+}
+
+.report-row strong {
+    color: var(--text-color);
+}
+
+.report-row.ecart-positif {
+    background-color: #fef2f2;
+}
+
+.report-row.ecart-positif strong {
+    color: #dc2626;
+}
+
+.report-row.ecart-negatif {
+    background-color: #fff7ed;
+}
+
+.report-row.ecart-negatif strong {
+    color: #ea580c;
+}
+
+.report-row.sans-activite {
+    background-color: #f9fafb;
+}
+
+.report-row.sans-activite strong {
+    color: #6b7280;
+}
+
+.report-row.success strong {
+    color: #16a34a;
+}
+
+.report-row.error strong {
+    color: #dc2626;
+}
+
+/* Log entry styling */
+.log-entry.success {
+    color: #16a34a;
+}
+
+.log-entry.error {
+    color: #dc2626;
+}

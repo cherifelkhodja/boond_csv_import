@@ -2311,9 +2311,454 @@ const providerInvoices = {
     }
 };
 
-// Initialize Export Time Reports, Import Time Reports, and Provider Invoices when DOM is ready
+// Ecarts Analysis module
+const ecartsAnalysis = {
+    analysisData: null,
+    agencies: [],
+
+    async init() {
+        const analyzeBtn = document.getElementById('ea-analyze-btn');
+        const updateStatesBtn = document.getElementById('ea-update-states-btn');
+        const exportCsvBtn = document.getElementById('ea-export-csv-btn');
+        const filterEcart = document.getElementById('ea-filter-ecart');
+        const filterSearch = document.getElementById('ea-filter-search');
+
+        if (!analyzeBtn) return;
+
+        // Load agencies
+        await this.loadAgencies();
+
+        // Set default dates (current year)
+        const today = new Date();
+        const startOfYear = `${today.getFullYear()}-01-01`;
+        const endOfYear = `${today.getFullYear()}-12-31`;
+        document.getElementById('ea-start-date').value = startOfYear;
+        document.getElementById('ea-end-date').value = endOfYear;
+
+        // Event listeners
+        analyzeBtn.addEventListener('click', () => this.analyze());
+        updateStatesBtn.addEventListener('click', () => this.updateStates());
+        exportCsvBtn.addEventListener('click', () => this.exportCSV());
+        filterEcart.addEventListener('change', () => this.applyFilters());
+        filterSearch.addEventListener('input', () => this.applyFilters());
+    },
+
+    async loadAgencies() {
+        try {
+            const response = await fetch('/api/ecarts/agencies');
+            const data = await response.json();
+
+            if (data.success && data.agencies) {
+                this.agencies = data.agencies;
+                const select = document.getElementById('ea-agency');
+                for (const agency of data.agencies) {
+                    const option = document.createElement('option');
+                    option.value = agency.id;
+                    option.textContent = agency.name;
+                    select.appendChild(option);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load agencies:', error);
+        }
+    },
+
+    async analyze() {
+        const analyzeBtn = document.getElementById('ea-analyze-btn');
+        const progressSection = document.getElementById('ea-progress-section');
+        const progressFill = document.getElementById('ea-progress-fill');
+        const progressText = document.getElementById('ea-progress-text');
+        const progressAction = document.getElementById('ea-progress-action');
+        const statsSection = document.getElementById('ea-stats-section');
+        const resultsSection = document.getElementById('ea-results-section');
+        const actionsSection = document.getElementById('ea-actions-section');
+        const reportSection = document.getElementById('ea-report-section');
+        const updateProgressSection = document.getElementById('ea-update-progress-section');
+
+        const agencyId = document.getElementById('ea-agency').value;
+        const startDate = document.getElementById('ea-start-date').value;
+        const endDate = document.getElementById('ea-end-date').value;
+
+        if (!startDate || !endDate) {
+            showNotification('Veuillez selectionner les dates', 'error');
+            return;
+        }
+
+        // Reset UI
+        analyzeBtn.disabled = true;
+        analyzeBtn.innerHTML = '<span class="spinner"></span>Analyse en cours...';
+        progressSection.classList.remove('hidden');
+        statsSection.classList.add('hidden');
+        resultsSection.classList.add('hidden');
+        actionsSection.classList.add('hidden');
+        reportSection.classList.add('hidden');
+        updateProgressSection.classList.add('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        progressAction.textContent = '';
+
+        try {
+            const response = await fetch('/api/ecarts/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    agency_id: agencyId || null,
+                    start_date: startDate,
+                    end_date: endDate
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.slice(6));
+                        this.handleAnalysisEvent(data);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Analysis error:', error);
+            showNotification('Erreur lors de l\'analyse', 'error');
+        } finally {
+            analyzeBtn.disabled = false;
+            analyzeBtn.textContent = 'Analyser';
+            progressSection.classList.add('hidden');
+        }
+    },
+
+    handleAnalysisEvent(data) {
+        const progressFill = document.getElementById('ea-progress-fill');
+        const progressText = document.getElementById('ea-progress-text');
+        const progressAction = document.getElementById('ea-progress-action');
+        const statsSection = document.getElementById('ea-stats-section');
+        const resultsSection = document.getElementById('ea-results-section');
+        const actionsSection = document.getElementById('ea-actions-section');
+
+        switch (data.type) {
+            case 'status':
+                progressAction.textContent = data.message;
+                break;
+
+            case 'progress':
+                progressFill.style.width = `${data.percent}%`;
+                progressText.textContent = `${data.percent}%`;
+                progressAction.textContent = data.message;
+                break;
+
+            case 'error':
+                showNotification(data.message, 'error');
+                break;
+
+            case 'complete':
+                if (data.data && data.data.factures) {
+                    this.analysisData = data.data;
+                    this.renderStats(data.data.stats);
+                    this.renderResults(data.data.factures);
+                    statsSection.classList.remove('hidden');
+                    resultsSection.classList.remove('hidden');
+                    actionsSection.classList.remove('hidden');
+                    showNotification(`Analyse terminee: ${data.data.factures.length} factures`, 'success');
+                } else {
+                    showNotification('Aucune facture trouvee', 'info');
+                }
+                break;
+        }
+    },
+
+    renderStats(stats) {
+        document.getElementById('ea-stat-total').textContent = stats.total;
+        document.getElementById('ea-stat-ecart-total').textContent = this.formatCurrency(stats.ecart_total);
+        document.getElementById('ea-stat-ecart-moyen').textContent = this.formatCurrency(stats.ecart_moyen);
+        document.getElementById('ea-stat-positif').textContent = stats.ecart_positif;
+        document.getElementById('ea-stat-negatif').textContent = stats.ecart_negatif;
+        document.getElementById('ea-stat-zero').textContent = stats.sans_ecart;
+        document.getElementById('ea-stat-sans-activite').textContent = stats.sans_activite;
+    },
+
+    renderResults(factures) {
+        const tbody = document.getElementById('ea-results-table').querySelector('tbody');
+        tbody.innerHTML = '';
+
+        for (const f of factures) {
+            const tr = document.createElement('tr');
+
+            // Determine row class based on ecart
+            if (f.activityAmount === 0) {
+                tr.className = 'row-sans-activite';
+            } else if (f.ecart > 0) {
+                tr.className = 'row-ecart-positif';
+            } else if (f.ecart < 0) {
+                tr.className = 'row-ecart-negatif';
+            } else {
+                tr.className = 'row-ecart-zero';
+            }
+
+            const ecartPercent = f.ecart_percent !== null ? `${f.ecart_percent}%` : '-';
+            const periode = f.startDate && f.endDate ? `${f.startDate} → ${f.endDate}` : '-';
+
+            tr.innerHTML = `
+                <td>${f.id}</td>
+                <td>${escapeHtml(f.reference)}</td>
+                <td>${f.resource_id}</td>
+                <td>${escapeHtml(f.resource_name)}</td>
+                <td>${f.invoiceDate || '-'}</td>
+                <td>${periode}</td>
+                <td class="amount">${this.formatCurrency(f.amountExcludingTax)}</td>
+                <td class="amount">${this.formatCurrency(f.activityAmount)}</td>
+                <td class="amount ecart">${this.formatCurrency(f.ecart)}</td>
+                <td class="amount">${ecartPercent}</td>
+                <td>${f.state}</td>
+            `;
+
+            tbody.appendChild(tr);
+        }
+    },
+
+    applyFilters() {
+        if (!this.analysisData) return;
+
+        const filterEcart = document.getElementById('ea-filter-ecart').value;
+        const filterSearch = document.getElementById('ea-filter-search').value.toLowerCase();
+
+        let filtered = this.analysisData.factures;
+
+        // Filter by ecart type
+        switch (filterEcart) {
+            case 'positif':
+                filtered = filtered.filter(f => f.ecart > 0 && f.activityAmount > 0);
+                break;
+            case 'negatif':
+                filtered = filtered.filter(f => f.ecart < 0 && f.activityAmount > 0);
+                break;
+            case 'zero':
+                filtered = filtered.filter(f => f.ecart === 0 && f.activityAmount > 0);
+                break;
+            case 'sans-activite':
+                filtered = filtered.filter(f => f.activityAmount === 0);
+                break;
+        }
+
+        // Filter by search
+        if (filterSearch) {
+            filtered = filtered.filter(f =>
+                f.reference.toLowerCase().includes(filterSearch) ||
+                f.resource_name.toLowerCase().includes(filterSearch)
+            );
+        }
+
+        this.renderResults(filtered);
+    },
+
+    async updateStates() {
+        if (!this.analysisData || !this.analysisData.factures.length) {
+            showNotification('Aucune facture a mettre a jour', 'error');
+            return;
+        }
+
+        const updateStatesBtn = document.getElementById('ea-update-states-btn');
+        const updateProgressSection = document.getElementById('ea-update-progress-section');
+        const progressFill = document.getElementById('ea-update-progress-fill');
+        const progressText = document.getElementById('ea-update-progress-text');
+        const progressAction = document.getElementById('ea-update-progress-action');
+        const actionLog = document.getElementById('ea-action-log');
+        const reportSection = document.getElementById('ea-report-section');
+
+        updateStatesBtn.disabled = true;
+        updateStatesBtn.innerHTML = '<span class="spinner"></span>Mise a jour...';
+        updateProgressSection.classList.remove('hidden');
+        reportSection.classList.add('hidden');
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        progressAction.textContent = '';
+        actionLog.innerHTML = '';
+
+        try {
+            const response = await fetch('/api/ecarts/update-states', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    invoices: this.analysisData.factures,
+                    new_state: 5
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = JSON.parse(line.slice(6));
+                        this.handleUpdateEvent(data);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Update error:', error);
+            showNotification('Erreur lors de la mise a jour', 'error');
+        } finally {
+            updateStatesBtn.disabled = false;
+            updateStatesBtn.textContent = 'Mettre a jour states → 5';
+        }
+    },
+
+    handleUpdateEvent(data) {
+        const progressFill = document.getElementById('ea-update-progress-fill');
+        const progressText = document.getElementById('ea-update-progress-text');
+        const progressAction = document.getElementById('ea-update-progress-action');
+        const actionLog = document.getElementById('ea-action-log');
+        const reportSection = document.getElementById('ea-report-section');
+        const reportContent = document.getElementById('ea-report-content');
+
+        switch (data.type) {
+            case 'progress':
+                progressFill.style.width = `${data.percent}%`;
+                progressText.textContent = `${data.percent}%`;
+                progressAction.textContent = data.message;
+                break;
+
+            case 'action':
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${data.status}`;
+                logEntry.textContent = data.message;
+                actionLog.appendChild(logEntry);
+                actionLog.scrollTop = actionLog.scrollHeight;
+                break;
+
+            case 'complete':
+                const stats = data.stats;
+                const analysisStats = this.analysisData.stats;
+
+                reportContent.innerHTML = `
+                    <div class="report-box">
+                        <h3>Analyse et mise a jour terminees</h3>
+                        <div class="report-grid">
+                            <div class="report-row">
+                                <span>Factures analysees</span>
+                                <strong>${analysisStats.total}</strong>
+                            </div>
+                            <div class="report-row">
+                                <span>Ecart total HT</span>
+                                <strong>${this.formatCurrency(analysisStats.ecart_total)}</strong>
+                            </div>
+                            <div class="report-row">
+                                <span>Ecart moyen HT</span>
+                                <strong>${this.formatCurrency(analysisStats.ecart_moyen)}</strong>
+                            </div>
+                            <div class="report-row ecart-positif">
+                                <span>Factures avec ecart > 0 (surfacturation)</span>
+                                <strong>${analysisStats.ecart_positif}</strong>
+                            </div>
+                            <div class="report-row ecart-negatif">
+                                <span>Factures avec ecart < 0 (sous-facturation)</span>
+                                <strong>${analysisStats.ecart_negatif}</strong>
+                            </div>
+                            <div class="report-row">
+                                <span>Factures sans ecart</span>
+                                <strong>${analysisStats.sans_ecart}</strong>
+                            </div>
+                            <div class="report-row sans-activite">
+                                <span>Factures sans activite</span>
+                                <strong>${analysisStats.sans_activite}</strong>
+                            </div>
+                            <div class="report-row success">
+                                <span>States mis a jour → 5</span>
+                                <strong>${stats.success} ✅</strong>
+                            </div>
+                            <div class="report-row error">
+                                <span>Erreurs mise a jour</span>
+                                <strong>${stats.errors} ❌</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                reportSection.classList.remove('hidden');
+                showNotification(`Mise a jour terminee: ${stats.success} succes, ${stats.errors} erreurs`, 'success');
+                break;
+        }
+    },
+
+    exportCSV() {
+        if (!this.analysisData || !this.analysisData.factures.length) {
+            showNotification('Aucune donnee a exporter', 'error');
+            return;
+        }
+
+        const headers = [
+            'id', 'reference', 'resource_id', 'resource_name', 'invoiceDate',
+            'startDate', 'endDate', 'amountExcludingTax', 'activityAmountExcludingTax',
+            'ecart', 'ecart_percent', 'state_before', 'state_after'
+        ];
+
+        const csvLines = [headers.join(';')];
+
+        for (const f of this.analysisData.factures) {
+            const values = [
+                f.id,
+                f.reference,
+                f.resource_id,
+                f.resource_name,
+                f.invoiceDate || '',
+                f.startDate || '',
+                f.endDate || '',
+                f.amountExcludingTax,
+                f.activityAmount,
+                f.ecart,
+                f.ecart_percent !== null ? f.ecart_percent : '',
+                f.state,
+                5
+            ];
+            csvLines.push(values.join(';'));
+        }
+
+        const csvContent = csvLines.join('\n');
+        const today = new Date().toISOString().split('T')[0];
+        const filename = `ecarts_analysis_${today}.csv`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+
+        showNotification('Export CSV telecharge', 'success');
+    },
+
+    formatCurrency(value) {
+        if (value === null || value === undefined) return '-';
+        const formatted = new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'EUR',
+            minimumFractionDigits: 2
+        }).format(value);
+        return formatted;
+    }
+};
+
+// Initialize Export Time Reports, Import Time Reports, Provider Invoices, and Ecarts Analysis when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     exportTimeReports.init();
     importTimeReports.init();
     providerInvoices.init();
+    ecartsAnalysis.init();
 });

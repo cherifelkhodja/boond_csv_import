@@ -24,6 +24,7 @@
             <li><a href="#" class="tab-link" data-entity="export-time-reports">Export Time Reports</a></li>
             <li><a href="#" class="tab-link" data-entity="import-time-reports">Import Time Reports</a></li>
             <li><a href="#" class="tab-link" data-entity="provider-invoices">Provider Invoices</a></li>
+            <li><a href="#" class="tab-link" data-entity="ecarts-analysis">Analyse Ecarts</a></li>
         </ul>
     </nav>
 
@@ -314,6 +315,124 @@
                         <span class="failed-count">Erreurs: <strong id="pi-res-errors">0</strong></span>
                     </div>
                     <button class="btn btn-primary" id="pi-download-csv-btn">Telecharger le rapport CSV</button>
+                </section>
+            </div>
+        </div>
+
+        <!-- Ecarts Analysis Tab -->
+        <div class="tab-content" id="tab-ecarts-analysis">
+            <div class="entity-container">
+                <!-- Filters Section -->
+                <section class="section">
+                    <h2>Filtres</h2>
+                    <div class="ecarts-filters">
+                        <div class="filter-group">
+                            <label for="ea-agency">Agence</label>
+                            <select id="ea-agency">
+                                <option value="">Toutes les agences</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="ea-start-date">Date debut</label>
+                            <input type="date" id="ea-start-date">
+                        </div>
+                        <div class="filter-group">
+                            <label for="ea-end-date">Date fin</label>
+                            <input type="date" id="ea-end-date">
+                        </div>
+                        <button class="btn btn-primary" id="ea-analyze-btn">Analyser</button>
+                    </div>
+                </section>
+
+                <!-- Stats Section -->
+                <section class="section hidden" id="ea-stats-section">
+                    <div class="ea-stats">
+                        <span class="ea-stat">Factures: <strong id="ea-stat-total">0</strong></span>
+                        <span class="ea-stat">Ecart total: <strong id="ea-stat-ecart-total">0 €</strong></span>
+                        <span class="ea-stat">Ecart moyen: <strong id="ea-stat-ecart-moyen">0 €</strong></span>
+                        <span class="ea-stat ecart-positif">Surfacturation: <strong id="ea-stat-positif">0</strong></span>
+                        <span class="ea-stat ecart-negatif">Sous-facturation: <strong id="ea-stat-negatif">0</strong></span>
+                        <span class="ea-stat ecart-zero">Sans ecart: <strong id="ea-stat-zero">0</strong></span>
+                        <span class="ea-stat sans-activite">Sans activite: <strong id="ea-stat-sans-activite">0</strong></span>
+                    </div>
+                </section>
+
+                <!-- Progress Section -->
+                <section class="section hidden" id="ea-progress-section">
+                    <div class="progress-container">
+                        <div class="progress-header">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="ea-progress-fill"></div>
+                            </div>
+                            <span class="progress-text" id="ea-progress-text">0%</span>
+                        </div>
+                        <div class="progress-action" id="ea-progress-action"></div>
+                    </div>
+                </section>
+
+                <!-- Results Table Section -->
+                <section class="section hidden" id="ea-results-section">
+                    <h2>Resultats</h2>
+                    <div class="ea-table-filters">
+                        <label>Filtre: </label>
+                        <select id="ea-filter-ecart">
+                            <option value="all">Tous</option>
+                            <option value="positif">Ecarts positifs (surfacturation)</option>
+                            <option value="negatif">Ecarts negatifs (sous-facturation)</option>
+                            <option value="zero">Sans ecart</option>
+                            <option value="sans-activite">Sans activite</option>
+                        </select>
+                        <input type="text" id="ea-filter-search" placeholder="Rechercher par reference ou resource...">
+                    </div>
+                    <div class="table-container">
+                        <table class="preview-table" id="ea-results-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Reference</th>
+                                    <th>Resource ID</th>
+                                    <th>Resource</th>
+                                    <th>Date facture</th>
+                                    <th>Periode</th>
+                                    <th>Facture HT</th>
+                                    <th>Activite HT</th>
+                                    <th>Ecart HT</th>
+                                    <th>Ecart %</th>
+                                    <th>State</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Actions Section -->
+                <section class="section hidden" id="ea-actions-section">
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" id="ea-update-states-btn">Mettre a jour states → 5</button>
+                        <button class="btn btn-secondary" id="ea-export-csv-btn">Exporter CSV</button>
+                    </div>
+                </section>
+
+                <!-- Update Progress Section -->
+                <section class="section hidden" id="ea-update-progress-section">
+                    <div class="progress-container">
+                        <div class="progress-header">
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="ea-update-progress-fill"></div>
+                            </div>
+                            <span class="progress-text" id="ea-update-progress-text">0%</span>
+                        </div>
+                        <div class="progress-action" id="ea-update-progress-action"></div>
+                        <div class="action-log" id="ea-action-log"></div>
+                    </div>
+                </section>
+
+                <!-- Final Report Section -->
+                <section class="section hidden" id="ea-report-section">
+                    <h2>Rapport final</h2>
+                    <div class="ea-report" id="ea-report-content">
+                    </div>
                 </section>
             </div>
         </div>
