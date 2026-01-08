@@ -232,6 +232,7 @@ def _process_invoice_row(
         "resource_name": resource_name,
         "resource_id": resource_id,
         "reference": reference,
+        "invoice_year": invoice_year,
         "invoice_date": invoice_date,
         "start_date": start_date,
         "end_date": end_date,
@@ -456,25 +457,36 @@ async def import_provider_invoices(
                 without_purchase += 1
                 result["payment_status"] = "no_purchase"
 
-            # Step 3: Update payment date if paid_date is provided and payment was created
-            if row["paid_date"] and payment_id:
-                paid_date_val = row["paid_date"]
-                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /payments/{payment_id} (performedDate: {paid_date_val})'})}\n\n"
-
-                date_success, date_error = await client.update_payment_date(
-                    payment_id=payment_id,
-                    performed_date=paid_date_val,
-                )
-
-                if date_success:
-                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Date paiement mise a jour: {paid_date_val}'})}\n\n"
-                    result["payment_date_status"] = "updated"
+            # Step 3: Update payment date (use paid_date or default to Dec 31st of invoice year)
+            if payment_id:
+                # Use provided date or default to last day of invoice year
+                if row["paid_date"]:
+                    paid_date_val = row["paid_date"]
                 else:
-                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Mise a jour date echouee: {date_error}'})}\n\n"
-                    result["payment_date_status"] = "error"
-            elif row["paid_date"] and not payment_id:
-                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Pas de payment_id, date non mise a jour'})}\n\n"
-                result["payment_date_status"] = "skipped"
+                    # Default to December 31st of invoice year
+                    invoice_year = row.get("invoice_year", "")
+                    if invoice_year:
+                        paid_date_val = f"{invoice_year}-12-31"
+                    else:
+                        paid_date_val = None
+
+                if paid_date_val:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /payments/{payment_id} (performedDate: {paid_date_val})'})}\n\n"
+
+                    date_success, date_error = await client.update_payment_date(
+                        payment_id=payment_id,
+                        performed_date=paid_date_val,
+                    )
+
+                    if date_success:
+                        yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Date paiement mise a jour: {paid_date_val}'})}\n\n"
+                        result["payment_date_status"] = "updated"
+                    else:
+                        yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Mise a jour date echouee: {date_error}'})}\n\n"
+                        result["payment_date_status"] = "error"
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Pas d annee, date non mise a jour'})}\n\n"
+                    result["payment_date_status"] = "skipped"
             else:
                 result["payment_date_status"] = "na"
 
