@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.boond_client import get_boond_client
@@ -521,6 +521,231 @@ async def import_provider_invoices(
             else:
                 missing_file_name = row["invoice_file"]
                 yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Fichier non trouve: {missing_file_name}'})}\n\n"
+                without_document += 1
+                result["document_status"] = "file_missing"
+
+            results.append(result)
+
+            # Delay between API calls
+            if api_delay_ms > 0:
+                await asyncio.sleep(api_delay_ms / 1000.0)
+
+        # Send final result with CSV data
+        final_result = {
+            "type": "complete",
+            "stats": {
+                "total": total,
+                "invoices_created": invoices_created,
+                "payments_added": payments_added,
+                "documents_attached": documents_attached,
+                "without_purchase": without_purchase,
+                "without_document": without_document,
+                "errors": errors,
+            },
+            "results": results,
+        }
+        yield f"data: {json.dumps(final_result)}\n\n"
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@router.post("/import-json")
+async def import_provider_invoices_json(
+    rows: list[dict] = Body(...),
+    api_delay_ms: int = DEFAULT_API_DELAY_MS,
+) -> StreamingResponse:
+    """
+    Import provider invoices from JSON data (modified preview).
+    Accepts the rows array directly from the frontend preview.
+    Returns Server-Sent Events for real-time progress.
+    """
+    total = len(rows)
+
+    async def generate_events():
+        client = get_boond_client()
+
+        # Counters
+        invoices_created = 0
+        payments_added = 0
+        documents_attached = 0
+        without_purchase = 0
+        without_document = 0
+        errors = 0
+
+        # Results for CSV export
+        results = []
+
+        for idx, row in enumerate(rows, start=1):
+            row_num = row.get("row_num", idx)
+            reference = row.get("reference", "")
+            resource_name = row.get("resource_name", "")
+            resource_id = row.get("resource_id", "")
+
+            # Progress event
+            progress_event = {
+                "type": "progress",
+                "current": idx,
+                "total": total,
+                "action": f"[{idx}/{total}] {reference} - {resource_name}",
+                "percent": int((idx / total) * 100) if total > 0 else 0,
+            }
+            yield f"data: {json.dumps(progress_event)}\n\n"
+
+            # Initialize result record
+            result = {
+                "row_num": row_num,
+                "reference": reference,
+                "resource_name": resource_name,
+                "resource_id": resource_id,
+                "invoice_id": None,
+                "invoice_status": "pending",
+                "payment_status": "pending",
+                "payment_date_status": "pending",
+                "document_status": "pending",
+                "error": None,
+            }
+
+            # Skip rows with errors
+            row_errors = row.get("errors", [])
+            if row.get("status") == "error" or row_errors:
+                error_msg = ", ".join(row_errors) if row_errors else "Erreur inconnue"
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] ERROR {reference} - {error_msg}'})}\n\n"
+                errors += 1
+                result["invoice_status"] = "error"
+                result["payment_status"] = "skipped"
+                result["payment_date_status"] = "skipped"
+                result["document_status"] = "skipped"
+                result["error"] = error_msg
+                results.append(result)
+                continue
+
+            # Step 1: Create provider invoice (state=1 if no reference, state=2 otherwise)
+            invoice_state = row.get("invoice_state", 2 if reference else 1)
+            state_info = f"state={invoice_state}" if invoice_state == 1 else ""
+            ref_display = reference if reference else "(sans reference)"
+            yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /provider-invoices {ref_display} {state_info}'})}\n\n"
+
+            success, invoice_id, error = await client.create_provider_invoice(
+                resource_id=resource_id,
+                reference=reference,
+                invoice_date=row.get("invoice_date", ""),
+                start_date=row.get("start_date", ""),
+                end_date=row.get("end_date", ""),
+                amount_excluding_tax=float(row.get("amount_excluding_tax", 0)),
+                amount_including_tax=float(row.get("amount_including_tax", 0)),
+                state=invoice_state,
+            )
+
+            if not success:
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] ERROR {reference} - Creation echouee: {error}'})}\n\n"
+                errors += 1
+                result["invoice_status"] = "error"
+                result["payment_status"] = "skipped"
+                result["payment_date_status"] = "skipped"
+                result["document_status"] = "skipped"
+                result["error"] = error
+                results.append(result)
+                await asyncio.sleep(api_delay_ms / 1000.0)
+                continue
+
+            yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - {resource_name} - Cree (ID: {invoice_id})'})}\n\n"
+            invoices_created += 1
+            result["invoice_id"] = invoice_id
+            result["invoice_status"] = "created"
+
+            # Step 2: Add payment if purchase_id found
+            payment_id = None
+            purchase_id = row.get("purchase_id", "")
+            if purchase_id:
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /provider-invoices/{invoice_id} (payment)'})}\n\n"
+
+                pay_success, payment_id, pay_error = await client.update_provider_invoice_payment(
+                    invoice_id=invoice_id,
+                    resource_id=resource_id,
+                    purchase_id=purchase_id,
+                    amount_excluding_tax=float(row.get("amount_excluding_tax", 0)),
+                    amount_including_tax=float(row.get("amount_including_tax", 0)),
+                    payment_state=int(row.get("payment_state", 2)),
+                )
+
+                if pay_success:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Payment ajoute (purchase: {purchase_id})'})}\n\n"
+                    payments_added += 1
+                    result["payment_status"] = "added"
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Payment echoue: {pay_error}'})}\n\n"
+                    result["payment_status"] = "error"
+                    result["error"] = pay_error
+            else:
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Purchase non trouve, pas de payment'})}\n\n"
+                without_purchase += 1
+                result["payment_status"] = "no_purchase"
+
+            # Step 3: Update payment date (use paid_date or default to Dec 31st of prestation year)
+            if payment_id:
+                paid_date = row.get("paid_date", "")
+                if paid_date:
+                    paid_date_val = paid_date
+                else:
+                    # Default to December 31st of prestation year (extracted from start_date)
+                    start_date = row.get("start_date", "")
+                    if start_date and len(start_date) >= 4:
+                        prestation_year = start_date[:4]
+                        paid_date_val = f"{prestation_year}-12-31"
+                    else:
+                        paid_date_val = None
+
+                if paid_date_val:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /payments/{payment_id} (performedDate: {paid_date_val})'})}\n\n"
+
+                    date_success, date_error = await client.update_payment_date(
+                        payment_id=payment_id,
+                        performed_date=paid_date_val,
+                    )
+
+                    if date_success:
+                        yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Date paiement mise a jour: {paid_date_val}'})}\n\n"
+                        result["payment_date_status"] = "updated"
+                    else:
+                        yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Mise a jour date echouee: {date_error}'})}\n\n"
+                        result["payment_date_status"] = "error"
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Pas d annee, date non mise a jour'})}\n\n"
+                    result["payment_date_status"] = "skipped"
+            else:
+                result["payment_date_status"] = "na"
+
+            # Step 4: Attach document if file exists
+            file_status = row.get("file_status", "")
+            invoice_file = row.get("invoice_file", "")
+            if file_status == "found":
+                file_path = PROVIDER_INVOICES_FOLDER / invoice_file
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /documents ({invoice_file})'})}\n\n"
+
+                doc_success, doc_error = await client.upload_document_to_provider_invoice(
+                    invoice_id=invoice_id,
+                    file_path=file_path,
+                )
+
+                if doc_success:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Document attache'})}\n\n"
+                    documents_attached += 1
+                    result["document_status"] = "attached"
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Document echoue: {doc_error}'})}\n\n"
+                    result["document_status"] = "error"
+            elif file_status == "na":
+                result["document_status"] = "na"
+            else:
+                if invoice_file:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Fichier non trouve: {invoice_file}'})}\n\n"
                 without_document += 1
                 result["document_status"] = "file_missing"
 

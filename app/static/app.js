@@ -1942,9 +1942,10 @@ const providerInvoices = {
         const tbody = document.getElementById('pi-preview-table').querySelector('tbody');
         tbody.innerHTML = '';
 
-        rows.forEach(row => {
+        rows.forEach((row, index) => {
             const tr = document.createElement('tr');
             tr.className = `row-${row.status}`;
+            tr.dataset.rowNum = row.row_num;
 
             // Status icons
             const statusIcon = row.status === 'ready' ? '🟢' : (row.status === 'partial' ? '🟡' : '🔴');
@@ -1961,26 +1962,127 @@ const providerInvoices = {
                 }
             }
 
-            const purchaseDisplay = row.purchase_id || '⚠️ Non trouve';
+            const purchaseDisplay = row.purchase_id || '';
 
             tr.innerHTML = `
                 <td>${row.row_num}</td>
                 <td>${escapeHtml(row.resource_name)}</td>
                 <td>${row.resource_id}</td>
-                <td>${escapeHtml(row.reference)}</td>
-                <td>${row.invoice_date}</td>
-                <td>${row.start_date}</td>
-                <td>${row.end_date}</td>
-                <td>${row.amount_excluding_tax.toFixed(2)}</td>
-                <td>${row.amount_including_tax.toFixed(2)}</td>
-                <td class="${row.purchase_id ? '' : 'warning'}">${purchaseDisplay}</td>
-                <td>${row.payment_state}</td>
+                <td class="editable" data-field="reference" contenteditable="true">${escapeHtml(row.reference)}</td>
+                <td class="editable" data-field="invoice_date" contenteditable="true">${row.invoice_date}</td>
+                <td class="editable" data-field="start_date" contenteditable="true">${row.start_date}</td>
+                <td class="editable" data-field="end_date" contenteditable="true">${row.end_date}</td>
+                <td class="editable" data-field="amount_excluding_tax" contenteditable="true">${row.amount_excluding_tax.toFixed(2)}</td>
+                <td class="editable" data-field="amount_including_tax" contenteditable="true">${row.amount_including_tax.toFixed(2)}</td>
+                <td class="editable ${row.purchase_id ? '' : 'warning'}" data-field="purchase_id" contenteditable="true">${purchaseDisplay}</td>
+                <td class="editable" data-field="payment_state" contenteditable="true">${row.payment_state}</td>
                 <td>${escapeHtml(row.invoice_file)} ${fileStatusBadge}</td>
                 <td>${statusIcon}</td>
             `;
 
+            // Add event listeners for editable cells
+            tr.querySelectorAll('.editable').forEach(cell => {
+                cell.addEventListener('blur', (e) => this.handleCellEdit(e, row.row_num));
+                cell.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.target.blur();
+                    }
+                });
+            });
+
             tbody.appendChild(tr);
         });
+    },
+
+    handleCellEdit(event, rowNum) {
+        const cell = event.target;
+        const field = cell.dataset.field;
+        let value = cell.textContent.trim();
+
+        // Find the row in previewData
+        const row = this.previewData.rows.find(r => r.row_num === rowNum);
+        if (!row) return;
+
+        // Parse value based on field type
+        if (field === 'amount_excluding_tax' || field === 'amount_including_tax') {
+            value = parseFloat(value.replace(',', '.')) || 0;
+            cell.textContent = value.toFixed(2);
+        } else if (field === 'payment_state') {
+            value = parseInt(value) || 1;
+            cell.textContent = value;
+        } else if (field === 'purchase_id') {
+            // Update warning class based on whether purchase_id is set
+            if (value) {
+                cell.classList.remove('warning');
+            } else {
+                cell.classList.add('warning');
+            }
+        }
+
+        // Update the row data
+        row[field] = value;
+
+        // Recalculate invoice_state based on reference
+        if (field === 'reference') {
+            row.invoice_state = value ? 2 : 1;
+        }
+
+        // Recalculate status
+        this.recalculateRowStatus(row);
+
+        // Update row class
+        const tr = cell.closest('tr');
+        tr.className = `row-${row.status}`;
+
+        // Update stats
+        this.updateStats();
+
+        // Mark cell as modified
+        cell.classList.add('modified');
+    },
+
+    recalculateRowStatus(row) {
+        // Recalculate errors
+        row.errors = [];
+        if (!row.resource_id) {
+            row.errors.push("resource_id manquant");
+        }
+        if (!row.start_date || !row.end_date) {
+            row.errors.push("dates invalides");
+        }
+
+        // Recalculate status
+        if (row.errors.length > 0) {
+            row.status = "error";
+        } else if (!row.purchase_id || row.file_status === "missing") {
+            row.status = "partial";
+        } else {
+            row.status = "ready";
+        }
+    },
+
+    updateStats() {
+        if (!this.previewData) return;
+
+        const rows = this.previewData.rows;
+        const stats = {
+            total: rows.length,
+            ready: rows.filter(r => r.status === 'ready').length,
+            partial: rows.filter(r => r.status === 'partial').length,
+            error: rows.filter(r => r.status === 'error').length,
+            with_payment: rows.filter(r => r.purchase_id).length,
+            with_document: rows.filter(r => r.file_status === 'found').length,
+        };
+
+        this.previewData.stats = stats;
+
+        document.getElementById('pi-stat-total').textContent = stats.total;
+        document.getElementById('pi-stat-ready').textContent = stats.ready;
+        document.getElementById('pi-stat-partial').textContent = stats.partial;
+        document.getElementById('pi-stat-error').textContent = stats.error;
+        document.getElementById('pi-stat-payment').textContent = stats.with_payment;
+        document.getElementById('pi-stat-document').textContent = stats.with_document;
     },
 
     applyFilters() {
@@ -2034,15 +2136,13 @@ const providerInvoices = {
         actionLog.innerHTML = '';
 
         try {
-            const formData = new FormData();
-            formData.append('invoices_file', this.invoicesFile);
-            if (this.purchasesFile) {
-                formData.append('purchases_file', this.purchasesFile);
-            }
-
-            const response = await fetch('/api/import-provider-invoices/import', {
+            // Send modified preview data as JSON
+            const response = await fetch('/api/import-provider-invoices/import-json', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(this.previewData.rows)
             });
 
             const reader = response.body.getReader();
