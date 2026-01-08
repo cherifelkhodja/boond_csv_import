@@ -217,8 +217,7 @@ def _process_invoice_row(
         errors.append("resource_id manquant")
     if not start_date or not end_date:
         errors.append("dates invalides")
-    if not reference:
-        errors.append("reference manquante")
+    # Note: missing reference is not an error, we create with state=1
 
     if errors:
         status = "error"
@@ -226,6 +225,9 @@ def _process_invoice_row(
         status = "partial"
     else:
         status = "ready"
+
+    # Determine invoice state: 1 if no reference, 2 otherwise
+    invoice_state = 1 if not reference else 2
 
     return {
         "row_num": row_num,
@@ -241,6 +243,7 @@ def _process_invoice_row(
         "purchase_id": purchase_id,
         "payment_state": payment_state,
         "paid_date": paid_date,
+        "invoice_state": invoice_state,
         "invoice_file": invoice_file,
         "file_status": file_status,
         "status": status,
@@ -399,8 +402,11 @@ async def import_provider_invoices(
                 results.append(result)
                 continue
 
-            # Step 1: Create provider invoice
-            yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /provider-invoices ({reference})'})}\n\n"
+            # Step 1: Create provider invoice (state=1 if no reference, state=2 otherwise)
+            invoice_state = row["invoice_state"]
+            state_info = f"state={invoice_state}" if invoice_state == 1 else ""
+            ref_display = reference if reference else "(sans reference)"
+            yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] POST /provider-invoices {ref_display} {state_info}'})}\n\n"
 
             success, invoice_id, error = await client.create_provider_invoice(
                 resource_id=resource_id,
@@ -410,6 +416,7 @@ async def import_provider_invoices(
                 end_date=row["end_date"],
                 amount_excluding_tax=row["amount_excluding_tax"],
                 amount_including_tax=row["amount_including_tax"],
+                state=invoice_state,
             )
 
             if not success:
