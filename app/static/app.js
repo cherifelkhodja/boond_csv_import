@@ -1991,7 +1991,13 @@ const providerInvoices = {
 
         let filteredRows = this.previewData.rows;
 
-        if (statusFilter !== 'all') {
+        if (statusFilter === 'no_payment') {
+            // Filter rows without purchase_id
+            filteredRows = filteredRows.filter(r => !r.purchase_id);
+        } else if (statusFilter === 'no_document') {
+            // Filter rows where file is expected but not found
+            filteredRows = filteredRows.filter(r => r.invoice_file && r.file_status === 'missing');
+        } else if (statusFilter !== 'all') {
             filteredRows = filteredRows.filter(r => r.status === statusFilter);
         }
 
