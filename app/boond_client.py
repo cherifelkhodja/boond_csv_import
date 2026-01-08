@@ -1562,7 +1562,7 @@ class BoondClient:
         amount_including_tax: float,
         payment_state: int = 2,
         tax_rate: float = 20.0,
-    ) -> tuple[bool, str | None]:
+    ) -> tuple[bool, str | None, str | None]:
         """
         Update a provider invoice to add payment via PUT /provider-invoices/{id}.
 
@@ -1575,7 +1575,7 @@ class BoondClient:
             payment_state: Payment state (1=unpaid, 2=paid)
             tax_rate: Tax rate (default: 20)
 
-        Returns: (success, error_message)
+        Returns: (success, payment_id, error_message)
         """
         payload = {
             "data": {
@@ -1614,16 +1614,70 @@ class BoondClient:
                 )
 
                 if response.status_code in (200, 201, 204):
-                    logger.info(f"Added payment to provider invoice {invoice_id}")
-                    return True, None
+                    # Extract payment_id from response
+                    payment_id = None
+                    if response.content:
+                        data = response.json()
+                        payments = data.get("data", {}).get("attributes", {}).get("payments", [])
+                        if payments and len(payments) > 0:
+                            payment_id = payments[0].get("id")
+                    logger.info(f"Added payment {payment_id} to provider invoice {invoice_id}")
+                    return True, payment_id, None
                 else:
                     error_data = response.json() if response.content else {}
                     error_msg = self._extract_error_message(error_data, response.status_code)
                     logger.warning(f"Failed to add payment to provider invoice {invoice_id}: {error_msg}")
-                    return False, error_msg
+                    return False, None, error_msg
 
             except Exception as e:
                 logger.error(f"Failed to add payment to provider invoice {invoice_id}: {e}")
+                return False, None, str(e)
+
+    async def update_payment_date(
+        self,
+        payment_id: str,
+        performed_date: str,
+    ) -> tuple[bool, str | None]:
+        """
+        Update a payment's performed date via PUT /payments/{id}.
+
+        Args:
+            payment_id: The payment ID
+            performed_date: The date the payment was performed (YYYY-MM-DD)
+
+        Returns: (success, error_message)
+        """
+        payload = {
+            "data": {
+                "type": "payment",
+                "attributes": {
+                    "performedDate": performed_date
+                }
+            }
+        }
+
+        logger.info(f"Updating payment {payment_id} with performedDate {performed_date}")
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.put(
+                    f"{self.base_url}/payments/{payment_id}",
+                    json=payload,
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code in (200, 201, 204):
+                    logger.info(f"Updated payment {payment_id} performedDate to {performed_date}")
+                    return True, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    logger.warning(f"Failed to update payment {payment_id}: {error_msg}")
+                    return False, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to update payment {payment_id}: {e}")
                 return False, str(e)
 
     async def upload_document_to_provider_invoice(

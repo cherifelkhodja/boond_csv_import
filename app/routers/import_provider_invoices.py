@@ -179,11 +179,15 @@ def _process_invoice_row(
     amount_ht = row.get("amountExcludingTax") or row.get("AmountExcludingTax") or ""
     amount_ttc = row.get("amountIncludingTax") or row.get("AmountIncludingTax") or ""
     invoice_paid = row.get("invoice_paid") or row.get("Invoice_paid") or ""
+    invoice_paid_date_raw = row.get("invoicePaid") or row.get("InvoicePaid") or ""
     invoice_missing = row.get("invoice_missing") or row.get("Invoice_missing") or ""
     invoice_file = row.get("invoice_file") or row.get("Invoice_file") or ""
 
     # Calculate dates
     start_date, end_date, invoice_date = _calculate_dates(invoice_year, invoice_month, invoice_date_raw)
+
+    # Parse paid date (DD/MM/YYYY -> YYYY-MM-DD)
+    paid_date = _parse_date_dmy(invoice_paid_date_raw)
 
     # Find purchase
     purchase_id = _find_purchase_for_resource(resource_id, start_date, purchases)
@@ -235,6 +239,7 @@ def _process_invoice_row(
         "amount_including_tax": amount_including_tax,
         "purchase_id": purchase_id,
         "payment_state": payment_state,
+        "paid_date": paid_date,
         "invoice_file": invoice_file,
         "file_status": file_status,
         "status": status,
@@ -375,6 +380,7 @@ async def import_provider_invoices(
                 "invoice_id": None,
                 "invoice_status": "pending",
                 "payment_status": "pending",
+                "payment_date_status": "pending",
                 "document_status": "pending",
                 "error": None,
             }
@@ -386,6 +392,7 @@ async def import_provider_invoices(
                 errors += 1
                 result["invoice_status"] = "error"
                 result["payment_status"] = "skipped"
+                result["payment_date_status"] = "skipped"
                 result["document_status"] = "skipped"
                 result["error"] = error_msg
                 results.append(result)
@@ -409,6 +416,7 @@ async def import_provider_invoices(
                 errors += 1
                 result["invoice_status"] = "error"
                 result["payment_status"] = "skipped"
+                result["payment_date_status"] = "skipped"
                 result["document_status"] = "skipped"
                 result["error"] = error
                 results.append(result)
@@ -421,10 +429,11 @@ async def import_provider_invoices(
             result["invoice_status"] = "created"
 
             # Step 2: Add payment if purchase_id found
+            payment_id = None
             if row["purchase_id"]:
                 yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /provider-invoices/{invoice_id} (payment)'})}\n\n"
 
-                pay_success, pay_error = await client.update_provider_invoice_payment(
+                pay_success, payment_id, pay_error = await client.update_provider_invoice_payment(
                     invoice_id=invoice_id,
                     resource_id=resource_id,
                     purchase_id=row["purchase_id"],
@@ -447,7 +456,29 @@ async def import_provider_invoices(
                 without_purchase += 1
                 result["payment_status"] = "no_purchase"
 
-            # Step 3: Attach document if file exists
+            # Step 3: Update payment date if paid_date is provided and payment was created
+            if row["paid_date"] and payment_id:
+                paid_date_val = row["paid_date"]
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] PUT /payments/{payment_id} (performedDate: {paid_date_val})'})}\n\n"
+
+                date_success, date_error = await client.update_payment_date(
+                    payment_id=payment_id,
+                    performed_date=paid_date_val,
+                )
+
+                if date_success:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] OK {reference} - Date paiement mise a jour: {paid_date_val}'})}\n\n"
+                    result["payment_date_status"] = "updated"
+                else:
+                    yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Mise a jour date echouee: {date_error}'})}\n\n"
+                    result["payment_date_status"] = "error"
+            elif row["paid_date"] and not payment_id:
+                yield f"data: {json.dumps({'type': 'action', 'message': f'[{idx}/{total}] WARN {reference} - Pas de payment_id, date non mise a jour'})}\n\n"
+                result["payment_date_status"] = "skipped"
+            else:
+                result["payment_date_status"] = "na"
+
+            # Step 4: Attach document if file exists
             if row["file_status"] == "found":
                 file_path = PROVIDER_INVOICES_FOLDER / row["invoice_file"]
                 invoice_file_name = row["invoice_file"]
