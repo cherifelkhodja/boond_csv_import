@@ -1978,6 +1978,7 @@ const providerInvoices = {
                 <td class="editable" data-field="payment_state" contenteditable="true">${row.payment_state}</td>
                 <td>${escapeHtml(row.invoice_file)} ${fileStatusBadge}</td>
                 <td>${statusIcon}</td>
+                <td><button class="btn-delete" data-row-num="${row.row_num}" title="Supprimer cette ligne">🗑️</button></td>
             `;
 
             // Add event listeners for editable cells
@@ -1991,8 +1992,28 @@ const providerInvoices = {
                 });
             });
 
+            // Add event listener for delete button
+            tr.querySelector('.btn-delete').addEventListener('click', (e) => {
+                this.deleteRow(row.row_num);
+            });
+
             tbody.appendChild(tr);
         });
+    },
+
+    deleteRow(rowNum) {
+        if (!this.previewData) return;
+
+        // Remove the row from previewData
+        this.previewData.rows = this.previewData.rows.filter(r => r.row_num !== rowNum);
+
+        // Update stats
+        this.updateStats();
+
+        // Re-render with current filter
+        this.applyFilters();
+
+        showNotification(`Ligne ${rowNum} supprimee`, 'success');
     },
 
     handleCellEdit(event, rowNum) {

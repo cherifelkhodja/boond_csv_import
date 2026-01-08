@@ -751,6 +751,22 @@ td input.error {
     font-style: italic;
 }
 
+/* Delete button */
+.btn-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    font-size: 1rem;
+    opacity: 0.5;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.btn-delete:hover {
+    opacity: 1;
+    transform: scale(1.2);
+}
+
 .pi-filters {
     display: flex;
     gap: 1rem;
