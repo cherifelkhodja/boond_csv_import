@@ -457,16 +457,17 @@ async def import_provider_invoices(
                 without_purchase += 1
                 result["payment_status"] = "no_purchase"
 
-            # Step 3: Update payment date (use paid_date or default to Dec 31st of invoice year)
+            # Step 3: Update payment date (use paid_date or default to Dec 31st of prestation year)
             if payment_id:
-                # Use provided date or default to last day of invoice year
+                # Use provided date or default to last day of prestation year
                 if row["paid_date"]:
                     paid_date_val = row["paid_date"]
                 else:
-                    # Default to December 31st of invoice year
-                    invoice_year = row.get("invoice_year", "")
-                    if invoice_year:
-                        paid_date_val = f"{invoice_year}-12-31"
+                    # Default to December 31st of prestation year (extracted from start_date)
+                    start_date = row.get("start_date", "")
+                    if start_date and len(start_date) >= 4:
+                        prestation_year = start_date[:4]  # Extract YYYY from YYYY-MM-DD
+                        paid_date_val = f"{prestation_year}-12-31"
                     else:
                         paid_date_val = None
 
