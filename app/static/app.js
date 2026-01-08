@@ -1948,7 +1948,19 @@ const providerInvoices = {
 
             // Status icons
             const statusIcon = row.status === 'ready' ? '🟢' : (row.status === 'partial' ? '🟡' : '🔴');
-            const fileStatusIcon = row.file_status === 'found' ? '✅' : (row.file_status === 'na' ? '➖' : '⚠️');
+
+            // File status badge - only show if invoice_file is not empty
+            let fileStatusBadge = '';
+            if (row.invoice_file && row.invoice_file.trim() !== '') {
+                if (row.file_status === 'found') {
+                    fileStatusBadge = '<span class="badge badge-success" title="Fichier trouve">✅</span>';
+                } else if (row.file_status === 'na') {
+                    fileStatusBadge = '<span class="badge badge-neutral" title="Non applicable">➖</span>';
+                } else {
+                    fileStatusBadge = '<span class="badge badge-error" title="Fichier non trouve">❌</span>';
+                }
+            }
+
             const purchaseDisplay = row.purchase_id || '⚠️ Non trouve';
 
             tr.innerHTML = `
@@ -1963,8 +1975,7 @@ const providerInvoices = {
                 <td>${row.amount_including_tax.toFixed(2)}</td>
                 <td class="${row.purchase_id ? '' : 'warning'}">${purchaseDisplay}</td>
                 <td>${row.payment_state}</td>
-                <td>${escapeHtml(row.invoice_file)}</td>
-                <td>${fileStatusIcon}</td>
+                <td>${escapeHtml(row.invoice_file)} ${fileStatusBadge}</td>
                 <td>${statusIcon}</td>
             `;
 
