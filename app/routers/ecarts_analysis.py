@@ -83,8 +83,8 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
         for idx, invoice in enumerate(invoices, start=1):
             invoice_id = invoice["id"]
             reference = invoice["reference"]
-            start_date = invoice["startDate"]
-            end_date = invoice["endDate"]
+            invoice_start_date = invoice["startDate"]
+            invoice_end_date = invoice["endDate"]
             amount_facture = float(invoice["amountExcludingTax"] or 0)
 
             # Progress
@@ -97,16 +97,13 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
             }
             yield f"data: {json.dumps(progress_event)}\n\n"
 
-            # Get activity expenses
-            if start_date and end_date:
-                success, activity_amount, _ = await client.get_activity_expenses(
-                    invoice_id=invoice_id,
-                    start_date=start_date,
-                    end_date=end_date,
-                )
-                if not success:
-                    activity_amount = 0
-            else:
+            # Get activity expenses using form period dates
+            success, activity_amount, _ = await client.get_activity_expenses(
+                invoice_id=invoice_id,
+                start_date=request.period_start,
+                end_date=request.period_end,
+            )
+            if not success:
                 activity_amount = 0
 
             # Calculate ecart
@@ -133,8 +130,8 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
                 "resource_id": invoice["resource_id"],
                 "resource_name": invoice["resource_name"],
                 "invoiceDate": invoice["invoiceDate"],
-                "startDate": start_date,
-                "endDate": end_date,
+                "startDate": invoice_start_date,
+                "endDate": invoice_end_date,
                 "amountExcludingTax": amount_facture,
                 "activityAmount": activity_amount,
                 "ecart": ecart,
