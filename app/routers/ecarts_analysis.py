@@ -21,8 +21,8 @@ DEFAULT_API_DELAY_MS = 100
 class AnalyzeRequest(BaseModel):
     """Request model for analyze endpoint."""
     agency_id: Optional[str] = None
-    start_date: str
-    end_date: str
+    period_start: str  # Filter by service period start date (startDate)
+    period_end: str    # Filter by service period end date (startDate <= period_end)
 
 
 class UpdateStatesRequest(BaseModel):
@@ -57,8 +57,8 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
 
         success, invoices, error = await client.get_provider_invoices_with_filters(
             agency_id=request.agency_id,
-            invoice_date_from=request.start_date,
-            invoice_date_to=request.end_date,
+            start_date_from=request.period_start,
+            start_date_to=request.period_end,
         )
 
         if not success:

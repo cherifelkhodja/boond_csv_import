@@ -2403,8 +2403,8 @@ const ecartsAnalysis = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     agency_id: agencyId || null,
-                    start_date: startDate,
-                    end_date: endDate
+                    period_start: startDate,
+                    period_end: endDate
                 })
             });
 
