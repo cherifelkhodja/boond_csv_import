@@ -1762,26 +1762,29 @@ class BoondClient:
     async def get_provider_invoices_with_filters(
         self,
         agency_id: str | None = None,
-        start_date_from: str | None = None,
-        start_date_to: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> tuple[bool, list[dict] | None, str | None]:
         """
         Get provider invoices with filters via GET /provider-invoices.
 
         Args:
-            agency_id: Filter by agency ID
-            start_date_from: Filter startDate >= (YYYY-MM-DD) - service period start
-            start_date_to: Filter startDate <= (YYYY-MM-DD) - service period start
+            agency_id: Filter by agency ID (perimeterAgencies)
+            start_date: Filter period start (YYYY-MM-DD) - service period
+            end_date: Filter period end (YYYY-MM-DD) - service period
 
         Returns: (success, invoices_list, error_message)
         """
-        params = {}
+        params = {
+            "maxResults": 500,
+            "period": "invoicePeriod",
+        }
         if agency_id:
-            params["agency"] = agency_id
-        if start_date_from:
-            params["startDateFrom"] = start_date_from
-        if start_date_to:
-            params["startDateTo"] = start_date_to
+            params["perimeterAgencies"] = agency_id
+        if start_date:
+            params["startDate"] = start_date
+        if end_date:
+            params["endDate"] = end_date
 
         all_invoices = []
         page = 1

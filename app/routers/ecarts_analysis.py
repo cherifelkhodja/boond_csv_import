@@ -57,8 +57,8 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
 
         success, invoices, error = await client.get_provider_invoices_with_filters(
             agency_id=request.agency_id,
-            start_date_from=request.period_start,
-            start_date_to=request.period_end,
+            start_date=request.period_start,
+            end_date=request.period_end,
         )
 
         if not success:
