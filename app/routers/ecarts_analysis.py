@@ -83,8 +83,6 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
         for idx, invoice in enumerate(invoices, start=1):
             invoice_id = invoice["id"]
             reference = invoice["reference"]
-            invoice_start_date = invoice["startDate"]
-            invoice_end_date = invoice["endDate"]
             amount_facture = float(invoice["amountExcludingTax"] or 0)
 
             # Progress
@@ -96,6 +94,15 @@ async def analyze_ecarts(request: AnalyzeRequest) -> StreamingResponse:
                 "message": f"[{idx}/{total}] {reference}",
             }
             yield f"data: {json.dumps(progress_event)}\n\n"
+
+            # Get invoice details to retrieve startDate/endDate (period)
+            detail_success, details, _ = await client.get_provider_invoice_details(invoice_id)
+            if detail_success and details:
+                invoice_start_date = details.get("startDate", "")
+                invoice_end_date = details.get("endDate", "")
+            else:
+                invoice_start_date = ""
+                invoice_end_date = ""
 
             # Get activity expenses using form period dates
             success, activity_amount, _ = await client.get_activity_expenses(

@@ -1855,6 +1855,47 @@ class BoondClient:
                 logger.error(f"Failed to get provider invoices: {e}")
                 return False, None, str(e)
 
+    async def get_provider_invoice_details(
+        self,
+        invoice_id: str,
+    ) -> tuple[bool, dict | None, str | None]:
+        """
+        Get provider invoice details via GET /provider-invoices/{id}/.
+
+        Args:
+            invoice_id: The provider invoice ID
+
+        Returns: (success, invoice_details, error_message)
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.get(
+                    f"{self.base_url}/provider-invoices/{invoice_id}/",
+                    auth=self.auth,
+                    headers=self._get_headers(),
+                )
+
+                if response.status_code == 200:
+                    data = response.json()
+                    attrs = data.get("data", {}).get("attributes", {})
+                    return True, {
+                        "startDate": attrs.get("startDate", ""),
+                        "endDate": attrs.get("endDate", ""),
+                        "reference": attrs.get("reference", ""),
+                        "invoiceDate": attrs.get("invoiceDate", ""),
+                        "amountExcludingTax": attrs.get("amountExcludingTax", 0),
+                        "amountIncludingTax": attrs.get("amountIncludingTax", 0),
+                        "state": attrs.get("state", 0),
+                    }, None
+                else:
+                    error_data = response.json() if response.content else {}
+                    error_msg = self._extract_error_message(error_data, response.status_code)
+                    return False, None, error_msg
+
+            except Exception as e:
+                logger.error(f"Failed to get provider invoice {invoice_id}: {e}")
+                return False, None, str(e)
+
     async def get_activity_expenses(
         self,
         invoice_id: str,
